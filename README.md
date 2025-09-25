@@ -62,7 +62,7 @@ graph TD
 
 ```
 
-### Snippet 3: 📡 Tabela Resumo do Protocolo de Aplicação
+### 📡 Tabela Resumo do Protocolo de Aplicação
 
 Este snippet foca em detalhar as "regras do jogo" da comunicação entre os serviços, um dos pontos-chave do seu projeto.
 
@@ -75,10 +75,10 @@ A comunicação entre os componentes segue as regras customizadas abaixo, utiliz
 | Passo | Direção | Mensagem (Exemplo JSON) | Propósito |
 | :--- | :--- | :--- | :--- |
 | 1 | Worker → Servidor | `{"WORKER": "ALIVE"}` | Apresentar-se e pedir tarefa. |
-| 2 | Servidor → Worker | `{"task": "QUERY", "USER": "..."}` | Enviar uma tarefa de consulta. |
-| 3 | Worker → Servidor | `{"STATUS": "OK", "SALDO": 99.99, ...}` | Devolver o resultado bem-sucedido. |
+| 2 | Servidor → Worker | `{"TASK": "QUERY", "USER": "..."}` | Enviar uma tarefa de consulta. |
+| 3 | Worker → Servidor | `{"STATUS": "OK NOK", "SALDO": 99.99, "TASK":"QUERY", "..."}` | Devolver o resultado bem-sucedido. |
 
 ### Interação: Servidor ↔ Servidor (Peer)
 | Passo | Direção | Mensagem (Exemplo JSON) | Propósito |
 | :--- | :--- | :--- | :--- |
-| 1 | Servidor A → Servidor B | `{"flag": "SERVER:ALIVE", "origin": "..."}` | Enviar um sinal de vida (heartbeat). |
+| 1 | Servidor A → Servidor B | `{"SERVER": "ALIVE"}` | Enviar um sinal de vida (heartbeat). |

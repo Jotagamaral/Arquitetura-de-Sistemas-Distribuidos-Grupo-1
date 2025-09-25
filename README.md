@@ -33,3 +33,52 @@
     ```bash
     python client.py
     ```
+
+    ## 🏛️ Arquitetura Visual
+
+```mermaid
+graph TD
+    subgraph "Rede de Servidores"
+        S1[Servidor A]
+        S2[Servidor B]
+        S1 -- "Heartbeat (SERVER:ALIVE)" --- S2
+    end
+
+    subgraph "Cluster de Workers A"
+        W1a[Worker]
+        W2a[Worker]
+        W3a[Worker]
+    end
+
+    DB[(Banco de Dados MySQL)]
+
+    S1 -- "Distribui Tarefas" --> W1a
+    S1 -- "Distribui Tarefas" --> W2a
+    S1 -- "Distribui Tarefas" --> W3a
+
+    W1a -- "Executa Query/Update" --> DB
+    W2a -- "Executa Query/Update" --> DB
+    W3a -- "Executa Query/Update" --> DB
+
+```
+
+### Snippet 3: 📡 Tabela Resumo do Protocolo de Aplicação
+
+Este snippet foca em detalhar as "regras do jogo" da comunicação entre os serviços, um dos pontos-chave do seu projeto.
+
+```markdown
+## 📡 Protocolo de Aplicação
+
+A comunicação entre os componentes segue as regras customizadas abaixo, utilizando JSON sobre WebSocket/TCP.
+
+### Interação: Servidor ↔ Worker
+| Passo | Direção | Mensagem (Exemplo JSON) | Propósito |
+| :--- | :--- | :--- | :--- |
+| 1 | Worker → Servidor | `{"WORKER": "ALIVE"}` | Apresentar-se e pedir tarefa. |
+| 2 | Servidor → Worker | `{"task": "QUERY", "USER": "..."}` | Enviar uma tarefa de consulta. |
+| 3 | Worker → Servidor | `{"STATUS": "OK", "SALDO": 99.99, ...}` | Devolver o resultado bem-sucedido. |
+
+### Interação: Servidor ↔ Servidor (Peer)
+| Passo | Direção | Mensagem (Exemplo JSON) | Propósito |
+| :--- | :--- | :--- | :--- |
+| 1 | Servidor A → Servidor B | `{"flag": "SERVER:ALIVE", "origin": "..."}` | Enviar um sinal de vida (heartbeat). |

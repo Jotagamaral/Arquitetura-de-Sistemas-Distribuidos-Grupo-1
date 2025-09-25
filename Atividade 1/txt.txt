@@ -1,0 +1,59 @@
+
+Imagine a seguinte analogia:
+
+* O **Coordenador (`coordenador.py`)** é como o **gerente de um restaurante**. Ele fica no balcão, esperando por pedidos. Ele não cozinha, ele apenas gerencia o trabalho.
+* O **Worker (`worker.py`)** é o **cozinheiro especialista**. Ele tem uma habilidade única: acessar o livro de receitas (o banco de dados). Ele fica na cozinha, esperando o gerente lhe passar um trabalho.
+
+O que "realmente está acontecendo" é a simulação dessa interação, passo a passo, através da rede.
+
+### A Sequência dos Eventos, de Forma Simples:
+
+1.  **O Gerente Chega Primeiro (Executando `coordenador.py`)**
+    * Você executa o `coordenador.py`. Ele abre as "portas do restaurante" em um endereço e porta específicos (`localhost:65432`) e fica esperando (`listen()`). Ele não faz nada ativamente, apenas aguarda um "cozinheiro" aparecer.
+
+2.  **O Cozinheiro Inicia o Expediente (Executando `worker.py`)**
+    * Você executa o `worker.py` em outro terminal. A primeira coisa que ele faz é "ir até o restaurante", ou seja, se conectar (`connect()`) ao endereço e porta que o gerente está ouvindo. A conexão é estabelecida.
+
+3.  **O "Bom Dia, Chefe!" (O Handshake)**
+    * Assim que se conecta, o cozinheiro (Worker) avisa que está pronto para trabalhar. Ele envia a mensagem `<WORKER:ALIVE>`.
+    * O gerente (Coordenador) recebe essa mensagem e agora sabe que tem um trabalhador disponível.
+
+4.  **O Pedido (A Tarefa)**
+    * O gerente, que já tinha uma tarefa em mente (buscar o saldo do CPF '111...'), aproveita que o cozinheiro está disponível e lhe passa a ordem.
+    * Ele envia a mensagem `<USER:11111111111;TASK:QUERY>`.
+
+5.  **O Cozinheiro Trabalha (A Lógica Principal)**
+    * O Worker recebe a ordem. Ele a interpreta: "Ok, a tarefa (`TASK`) é uma consulta (`QUERY`) e o alvo é o usuário (`USER`) com este CPF".
+    * Agora, ele faz seu trabalho especializado: ele para de falar com o gerente e vai até o "livro de receitas" (o banco de dados PostgreSQL).
+    * Ele usa suas credenciais (`DB_CONFIG`) para se conectar ao banco, executa a busca (`SELECT`) pelo CPF e pega o resultado (o saldo e a data).
+
+6.  **O Prato Final (A Resposta)**
+    * Com o resultado em mãos, o Worker volta a falar com o gerente.
+    * Se ele achou o saldo, ele monta uma mensagem de sucesso: `<CPF:...;SALDO:...;STATUS:OK>`.
+    * Se não achou nada no banco, ele monta uma mensagem de falha: `<CPF:...;TASK:QUERY;STATUS:NOK>`.
+    * Ele envia essa mensagem final de volta para o gerente (Coordenador).
+
+7.  **Fim do Expediente**
+    * O gerente recebe a resposta, a exibe na sua tela e o trabalho termina. Ambas as conexões são fechadas e os programas finalizam.
+
+### As Peças-Chave por Trás Disso:
+
+* **Processos Separados:** `coordenador.py` e `worker.py` são **dois programas completamente independentes**. Eles poderiam estar rodando em dois computadores diferentes, em qualquer lugar do mundo. A única coisa que os une é a conexão de rede. Isso é a essência de um sistema distribuído.
+
+* **Arquitetura Cliente-Servidor:** O Coordenador é o **Servidor** (ele serve um serviço, fica passivo esperando). O Worker é o **Cliente** (ele inicia a conexão para consumir o serviço).
+
+* **Sockets:** São os "telefones" que os programas usam para conversar. `socket.bind()` é como o servidor registra seu número de telefone. `socket.listen()` é ele esperando o telefone tocar. `socket.connect()` é o cliente discando esse número. `send()` e `recv()` é o ato de falar e ouvir no telefone.
+
+* **Protocolo:** As mensagens no formato `<CHAVE:VALOR;...>` não são aleatórias. Elas são as **regras da conversa**, a "linguagem" que os dois combinaram de falar. Sem um protocolo rígido, a comunicação seria um caos.
+
+### E Por Que Isso é Importante? (O Objetivo da Aula)
+
+O professor está usando este exemplo simples para construir a base de um conceito muito mais poderoso. A próxima etapa, como ele mencionou, é:
+
+**E se existissem TRÊS cozinheiros (Workers) e um deles tivesse um livro de receitas (banco de dados) desatualizado?**
+
+Quando o gerente pedir o saldo do João, ele poderia perguntar aos três. Dois responderiam "25000", mas um poderia responder "10000". O sistema entraria em um estado **inconsistente**.
+
+O objetivo final da matéria é fazer com que os próprios "cozinheiros" (Workers) conversem entre si para decidir qual é o saldo correto (**consenso**) antes de dar uma única resposta final para o gerente. Isso garante a **tolerância a falhas** e a **consistência** do sistema.
+
+Resumindo: **O que realmente está acontecendo é a criação de dois programas independentes que colaboram para realizar uma tarefa, seguindo um conjunto de regras (protocolo) para se comunicar através de uma conexão de rede (sockets).**

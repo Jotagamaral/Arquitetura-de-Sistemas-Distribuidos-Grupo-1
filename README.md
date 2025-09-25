@@ -1,6 +1,7 @@
 # Sistema Distribuído de Servidor e Worker
 
-**Integrantes**: João Gabriel, Carlos Eduardo e Arthur Gomes
+**Integrantes**: João Gabriel, Carlos Eduardo e Arthur Gomes.
+
 **Repositório**: [Jotagamaral/Arquitetura-de-Sistemas-Distribuidos-Grupo-1](https://github.com/Jotagamaral/Arquitetura-de-Sistemas-Distribuidos-Grupo-1)
 
 ## 1. Visão Geral do Projeto

@@ -1,7 +1,6 @@
-# Sistema Distribuído de Consulta e Atualização de Saldo
+# Sistema Distribuído de Servidor e Worker
 
-**Autor**: João Gabriel  
-**Data**: 25 de Setembro de 2025  
+**Integrantes**: João Gabriel, Carlos Eduardo e Arthur Gomes
 **Repositório**: [Jotagamaral/Arquitetura-de-Sistemas-Distribuidos-Grupo-1](https://github.com/Jotagamaral/Arquitetura-de-Sistemas-Distribuidos-Grupo-1)
 
 ## 1. Visão Geral do Projeto

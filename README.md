@@ -10,8 +10,7 @@ Este projeto implementa um sistema distribuído em Python projetado para process
 
 O ecossistema é composto por:
 * **Servidores (`server.py`)**: Orquestradores que gerenciam workers, distribuem tarefas e comunicam-se entre si para monitoramento de carga e status (heartbeat).
-* **Workers (`client.py`)**: Executores de tarefas que se conectam aos servidores, interagem com o banco de dados e retornam resultados.
-* **Banco de Dados (MySQL)**: A camada de persistência para os dados dos usuários.
+* **Workers (`client.py`)**: Executores de tarefas que se conectam aos servidores e retornam resultados (fictícios).
 
 ## 2. 🚀 Guia de Execução Rápida (Quick Start)
 
@@ -23,15 +22,10 @@ O ecossistema é composto por:
 
 2.  **Instale as dependências:**
     ```bash
-    pip install websockets mysql-connector-python
+    pip install websockets
     ```
 
-3.  **Configure o Banco de Dados:**
-    * Certifique-se de que seu servidor MySQL está rodando.
-    * Execute o script SQL para criar as tabelas (disponível na seção `6. Configuração e Execução`).
-    * Ajuste as credenciais do banco de dados nos arquivos `client.py` e `server.py`.
-
-4.  **Inicie os Servidores:**
+3.  **Inicie os Servidores:**
     * Abra um terminal para cada instância do servidor.
     * Ajuste as configurações `MY_ADDRESS` e `PEER_SERVERS` em cada arquivo de servidor.
     ```bash
@@ -69,19 +63,21 @@ graph TD
 
     DB[(Banco de Dados MySQL)]
 
-    S1 -- "Distribui Tarefas" --> W1
-    S1 -- "Distribui Tarefas" --> W2
-    S2 -- "Distribui Tarefas" --> W3
-    S2 -- "Distribui Tarefas" --> W4
-    
-    W1 -- "Executa Query/Update" --> DB
-    W2 -- "Executa Query/Update" --> DB
-    W3 -- "Executa Query/Update" --> DB
-    W4 -- "Executa Query/Update" --> DB
+        S1 -- "Distribui Tarefas" --> W1
+        S1 -- "Distribui Tarefas" --> W2
+        S2 -- "Distribui Tarefas" --> W3
+        S2 -- "Distribui Tarefas" --> W4
 
-    W1 -- "Pode ser redirecionado para S2 se S1 estiver saturado" --> S2
+        W1 -- "Executa Query/Update (fictício)" --> S1
+        W2 -- "Executa Query/Update (fictício)" --> S1
+        W3 -- "Executa Query/Update (fictício)" --> S2
+        W4 -- "Executa Query/Update (fictício)" --> S2
+
+        W1 -- "Pode ser redirecionado para S2 se S1 estiver saturado" --> S2
 ```
 ### 📡 Tabela Resumo do Protocolo de Aplicação
+
+> **Nota:** As operações de consulta e atualização são simuladas/fictícias, sem integração real com banco de dados.
 
 Este snippet foca em detalhar as "regras do jogo" da comunicação entre os serviços, um dos pontos-chave do seu projeto.
 
@@ -108,11 +104,3 @@ A comunicação entre os componentes segue as regras customizadas abaixo, utiliz
 | 4.2 | Servidor B → Servidor A | `{"TASK": "WORKER_RESPONSE", "STATUS": "NACK",  "WORKERS": [] }` | Enviar uma resposta negativa de pedido de trabalhadores emprestado. |
 
 | 4.3 | Worker (Emprestado) → Servidor A | `{"WORKER": "ALIVE", "WORKER_UUID":"..."}` | Worker emprestado envia uma conexão para o servidor saturado. |
-
-
-
-
-
-
-
-

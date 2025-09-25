@@ -1,61 +1,138 @@
-import asyncio
-import websockets
+import socket
+import threading
 import json
-from datetime import datetime
+import time
+from typing import Dict
 
-async def handle_connection(websocket):
-    """
-    Gerencia a conexão com um cliente (worker).
-    """
-    print("Novo cliente (worker) conectado.")
+# --- Configurações do Servidor ---
+MY_IP = '127.0.0.1'
+MY_PORT = 8765
+MY_ID = f'SERVER_{MY_PORT}'
+
+PEER_SERVERS = [
+    {'ip': '127.0.0.1', 'port': 8766, 'id': f'SERVER_8766'},
+]
+
+HEARTBEAT_INTERVAL = 10  # segundos
+HEARTBEAT_TIMEOUT = 25   # segundos
+
+# Dicionário para armazenar o status dos peers (thread-safe)
+peer_status: Dict[str, Dict] = {}
+status_lock = threading.Lock() # Lock para proteger o acesso ao peer_status
+
+# --- Funções do Cliente de Heartbeat ---
+def send_heartbeat(peer):
+    """Tenta enviar um heartbeat para um peer e processa a resposta."""
     try:
-        # 1. Aguarda a flag de 'alive' do worker
-        message = await websocket.recv()
-        data = json.loads(message)
-        
-        if data.get("flag") == "WORKER:ALIVE":
-            print(f"Worker reportando: {data['flag']}")
+        with socket.create_connection((peer['ip'], peer['port']), timeout=5) as client_socket:
+            # Envia a mensagem de heartbeat
+            msg = {"SERVER_ID": peer['id'], "TASK": "HEARTBEAT"}
+            print(f"[HEARTBEAT] Enviando para {peer['id']} ({peer['ip']}:{peer['port']}): {json.dumps(msg)}")
+            client_socket.sendall(json.dumps(msg).encode('utf-8'))
 
-            # 2. Envia a tarefa para o worker buscar o saldo
-            # O CPF agora é a chave para a busca no banco de dados do worker
-            cpf_alvo = "11111111111" 
-            task_message = {
-                "user_id": cpf_alvo,
-                "task": "QUERY",
-                "flag": f"<USER:{cpf_alvo}; TASK:QUERY>"
-            }
-            await websocket.send(json.dumps(task_message))
-            print(f"Tarefa enviada para o worker: {json.dumps(task_message)}")
+            # Recebe a resposta
+            response = client_socket.recv(1024)
+            if not response:
+                print(f"[HEARTBEAT] Sem resposta de {peer['id']} ({peer['ip']}:{peer['port']})")
+                return # Conexão fechada sem resposta
 
-            # 3. Aguarda o retorno do worker com o saldo
-            response_message = await websocket.recv()
-            response_data = json.loads(response_message)
-            
-            if response_data.get("status") == "OK":
-                print("\n--- Resposta do Worker ---")
-                print(f"CPF: {response_data['cpf']}")
-                print(f"Saldo: R$ {response_data['saldo']:.2f}")
-                print(f"Última atualização: {response_data['update_at']}")
-                print("--------------------------\n")
-            else:
-                print(f"Erro na resposta do worker: {response_data.get('status')}. CPF não encontrado.")
+            data = json.loads(response.decode('utf-8'))
+            print(f"[HEARTBEAT] Resposta recebida de {peer['id']} ({peer['ip']}:{peer['port']}): {json.dumps(data)}")
 
-    except websockets.exceptions.ConnectionClosed as e:
-        print(f"Conexão fechada inesperadamente: {e}")
-    except json.JSONDecodeError:
-        print("Erro ao decodificar JSON. Mensagem recebida inválida.")
+            if data.get("RESPONSE") == "ALIVE":
+                with status_lock:
+                    peer_status[peer['id']] = {'last_alive': time.time()}
+
+    except (socket.timeout, ConnectionRefusedError):
+        print(f"[HEARTBEAT] Falha ao conectar com {peer['id']} ({peer['ip']}:{peer['port']}) - offline ou recusado.")
+        with status_lock:
+            if peer['id'] in peer_status:
+                del peer_status[peer['id']]
     except Exception as e:
-        print(f"Ocorreu um erro inesperado: {e}")
+        print(f"Erro inesperado em send_heartbeat para {peer['id']}: {e}")
 
-async def main():
-    """
-    Inicia e executa o servidor WebSocket.
-    """
-    # Define o servidor para rodar em localhost na porta 8765
-    async with websockets.serve(handle_connection, "localhost", 8765):
-        print("Servidor WebSockets iniciado em ws://localhost:8765")
-        # Mantém o servidor rodando infinitamente
-        await asyncio.Future()
+def heartbeat_loop():
+    """Loop que envia heartbeats para todos os peers periodicamente."""
+    while True:
+        for peer in PEER_SERVERS:
+            # Não é necessário checar se é o próprio servidor, pois ele não está na lista
+            send_heartbeat(peer)
+        time.sleep(HEARTBEAT_INTERVAL)
 
+# --- Funções do Servidor Principal ---
+def handle_connection(conn: socket.socket, addr):
+    """Lida com uma conexão de entrada de um peer."""
+    try:
+        with conn:
+            message = conn.recv(1024)
+            if not message:
+                print(f"Conexão de {addr} fechada sem dados.")
+                return
+
+            data = json.loads(message.decode('utf-8'))
+            
+            if data.get("TASK") == "HEARTBEAT":
+                peer_id = data.get("SERVER_ID")
+                print(f"[SERVER] Recebido HEARTBEAT de {peer_id} ({addr}): {json.dumps(data)}")
+                if peer_id:
+                    with status_lock:
+                        peer_status[peer_id] = {'last_alive': time.time()}
+
+                # Envia a resposta 'ALIVE'
+                response = {
+                    "SERVER_ID": peer_id,
+                    "TASK": "HEARTBEAT",
+                    "RESPONSE": "ALIVE"
+                }
+                print(f"[SERVER] Respondendo HEARTBEAT para {peer_id} ({addr}): {json.dumps(response)}")
+                conn.sendall(json.dumps(response).encode('utf-8'))
+
+    except Exception as e:
+        print(f"Erro ao lidar com conexão de {addr}: {e}")
+
+def server_listen_loop():
+    """Loop principal que escuta por novas conexões."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
+        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server_socket.bind((MY_IP, MY_PORT))
+        server_socket.listen()
+        print(f"Servidor TCP iniciado em {MY_IP}:{MY_PORT} (ID: {MY_ID})")
+
+        while True:
+            conn, addr = server_socket.accept()
+            # Cria uma nova thread para cada conexão, para não bloquear o servidor
+            handler_thread = threading.Thread(target=handle_connection, args=(conn, addr))
+            handler_thread.start()
+
+# --- Monitoramento de Timeout ---
+def timeout_monitor():
+    """Verifica periodicamente se algum peer ficou inativo."""
+    while True:
+        time.sleep(HEARTBEAT_INTERVAL)
+        now = time.time()
+        
+        with status_lock:
+            # Itera sobre uma cópia para poder modificar o dicionário
+            for peer_id, info in list(peer_status.items()):
+                if (now - info['last_alive']) > HEARTBEAT_TIMEOUT:
+                    print(f"!!! Peer {peer_id} está INATIVO (timeout) !!!")
+                    del peer_status[peer_id]
+
+# --- Início do Programa ---
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        # Cria e inicia as threads para cada funcionalidade principal
+        server_thread = threading.Thread(target=server_listen_loop, daemon=True)
+        heartbeat_thread = threading.Thread(target=heartbeat_loop, daemon=True)
+        monitor_thread = threading.Thread(target=timeout_monitor, daemon=True)
+
+        server_thread.start()
+        heartbeat_thread.start()
+        monitor_thread.start()
+
+        # Mantém a thread principal viva para que as threads de fundo possam rodar
+        while True:
+            time.sleep(1)
+
+    except KeyboardInterrupt:
+        print("\nServidor encerrado.")

@@ -10,6 +10,7 @@ from server_lib.server_main import server_listen_loop
 from server_lib.monitor import timeout_monitor
 import threading
 import time
+from server_lib.logger import logger
 
 if __name__ == "__main__":
     try:
@@ -27,4 +28,4 @@ if __name__ == "__main__":
             time.sleep(1)
 
     except KeyboardInterrupt:
-        print("\nServidor encerrado.")
+        logger.info("Servidor encerrado.")

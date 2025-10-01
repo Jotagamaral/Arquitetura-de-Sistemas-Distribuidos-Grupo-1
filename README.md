@@ -8,8 +8,9 @@
 
 Este projeto implementa um sistema distribuído em Python projetado para processar tarefas de consulta e atualização de saldos de contas. A arquitetura demonstra a comunicação assíncrona entre múltiplos serviços, balanceamento de carga dinâmico e escalabilidade de componentes.
 
+
 O ecossistema é composto por:
-* **Servidores (`server.py`)**: Orquestradores que gerenciam workers, distribuem tarefas e comunicam-se entre si para monitoramento de carga e status (heartbeat).
+* **Servidores (`server_runner.py` + `server_lib/`)**: Orquestradores que gerenciam workers, distribuem tarefas e comunicam-se entre si para monitoramento de carga e status (heartbeat). Toda a lógica do servidor está modularizada na pasta `server_lib/`.
 * **Workers (`client.py`)**: Executores de tarefas que se conectam aos servidores e retornam resultados (fictícios).
 
 ## 2. 🚀 Guia de Execução Rápida (Quick Start)
@@ -22,21 +23,22 @@ O ecossistema é composto por:
 
 2.  **Instale as dependências:**
     ```bash
-    pip install websockets
+    pip install websockets loguru
     ```
 
-3.  **Inicie os Servidores:**
-    * Abra um terminal para cada instância do servidor.
-    * Ajuste as configurações `MY_ADDRESS` e `PEER_SERVERS` em cada arquivo de servidor.
+
+3.  **Configure e Inicie os Servidores:**
+    * Para cada instância de servidor, duplique o arquivo `server_runner.py` (ex: `server_runner_8765.py`, `server_runner_8766.py`).
+    * Ajuste as configurações de IP, PORTA e peers em `server_lib/config.py` para cada instância.
+    * Em cada terminal, execute:
     ```bash
-    # Terminal 1
-    python server_8765.py
-
-    # Terminal 2
-    python server_8766.py
+    python server_runner.py
+    # ou para outra instância
+    python server_runner_8766.py
     ```
+    * Os logs são salvos em `log_server.txt` e exibidos no terminal, utilizando a biblioteca `loguru`.
 
-5.  **Inicie o Cliente de Teste (Worker):**
+4.  **Inicie o Cliente de Teste (Worker):**
     * Ajuste os parâmetros de teste em `client.py`.
     * Em um novo terminal, execute:
     ```bash
@@ -61,8 +63,6 @@ graph TD
         W4[Worker]
     end
 
-    DB[(Banco de Dados MySQL)]
-
         S1 -- "Distribui Tarefas" --> W1
         S1 -- "Distribui Tarefas" --> W2
         S2 -- "Distribui Tarefas" --> W3
@@ -77,7 +77,11 @@ graph TD
 ```
 ### 📡 Tabela Resumo do Protocolo de Aplicação
 
-> **Nota:** As operações de consulta e atualização são simuladas/fictícias, sem integração real com banco de dados.
+
+> **Nota:**
+> - As operações de consulta e atualização são simuladas/fictícias, sem integração real com banco de dados.
+> - Toda a comunicação, heartbeat e monitoramento de peers é registrada em log com a biblioteca `loguru` (arquivo `log_server.txt`).
+> - Para criar múltiplos servidores, basta duplicar `server_runner.py` e ajustar `server_lib/config.py`.
 
 Este snippet foca em detalhar as "regras do jogo" da comunicação entre os serviços, um dos pontos-chave do seu projeto.
 

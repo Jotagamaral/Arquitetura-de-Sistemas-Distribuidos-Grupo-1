@@ -15,7 +15,8 @@ WORKER_ID = 'WORKER_CARLOS_01'
 # Para testar na mesma máquina, você pode usar '127.0.0.1' e a porta
 # de um dos servidores que você criou anteriormente (ex: 8765).
 HOME_MASTER_IP = '127.0.0.1'
-HOME_MASTER_PORT = 5000
+# Ajuste esta porta para apontar ao servidor (ex: 8765)
+HOME_MASTER_PORT = 8765
 
 # Tempo em segundos que o worker espera antes de tentar se reconectar
 # a um servidor que caiu.

@@ -3,9 +3,9 @@ worker_runner.py
 Arquivo principal para rodar o Worker.
 """
 
+from worker_lib.logger import logger
 from worker_lib.config import WORKER_ID, HOME_MASTER_IP, HOME_MASTER_PORT
 from worker_lib.worker_main import main_loop
-from worker_lib.logger import logger
 import worker_lib.state as state
 
 if __name__ == "__main__":

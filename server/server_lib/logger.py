@@ -7,7 +7,7 @@ from loguru import logger
 from random import randint
 import sys
 
-ARQUIVO_LOG = 'log_server.txt'
+ARQUIVO_LOG = 'log_server.log'
 IDENTIFICACAO = randint(10,100000000)
 
 

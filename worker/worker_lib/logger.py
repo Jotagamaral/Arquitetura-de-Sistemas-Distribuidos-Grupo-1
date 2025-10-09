@@ -8,7 +8,7 @@ from random import randint    # Gera ID aleatório do log
 import sys                    # Permite enviar logs também ao terminal
 
 # Nome do arquivo de log
-ARQUIVO_LOG = 'log_worker.txt'
+ARQUIVO_LOG = 'log_worker.log'
 IDENTIFICACAO = randint(10, 100000000)
 
 # Remove loggers anteriores e adiciona novo com formato personalizado
@@ -34,3 +34,4 @@ logger.add(
 
 # Associa um ID aleatório ao logger para rastreamento
 logger = logger.bind(id=IDENTIFICACAO)
+

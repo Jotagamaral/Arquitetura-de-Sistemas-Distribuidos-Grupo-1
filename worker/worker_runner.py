@@ -11,16 +11,14 @@ import worker_lib.state as state
 if __name__ == "__main__":
     logger.info(f"Iniciando Worker ID: {WORKER_ID}")
 
-    # Configuração inicial do estado. O worker sempre começa apontando para seu "servidor pai".
+    # Define o servidor "pai" e o servidor atual (inicialmente o mesmo)
     state.home_master['ip'] = HOME_MASTER_IP
     state.home_master['port'] = HOME_MASTER_PORT
-    state.current_master['ip'] = HOME_MASTER_IP
-    state.current_master['port'] = HOME_MASTER_PORT
+    state.current_master.update(state.home_master)
 
     try:
-        # Inicia o loop principal que gerencia a conexão e as tarefas.
-        main_loop()
+        main_loop()  # Inicia o loop principal
     except KeyboardInterrupt:
         logger.info("Worker encerrado pelo usuário.")
     except Exception as e:
-        logger.critical(f"Erro crítico não tratado no worker_runner: {e}")
+        logger.critical(f"Erro crítico: {e}")

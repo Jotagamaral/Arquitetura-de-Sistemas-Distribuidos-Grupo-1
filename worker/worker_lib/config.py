@@ -4,7 +4,7 @@ Configurações e parâmetros do Worker.
 """
 
 # Identificação única do worker (pode ser o nome da máquina)
-WORKER_ID = 'WORKER_CARLOS_01'
+WORKER_ID = 'WORKER_01'
 
 # Endereço e porta do servidor principal (Home Master)
 HOME_MASTER_IP = '127.0.0.1'     # Localhost (para testes locais)

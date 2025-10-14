@@ -47,34 +47,44 @@ O ecossistema é composto por:
 
 ## 3. 🏛️ Arquitetura Visual
 
+O diagrama a seguir ilustra o fluxo de comunicação e as interações entre os componentes do sistema.
+
 ```mermaid
 graph TD
     subgraph "Rede de Servidores (Peer-to-Peer)"
         S1[Servidor A]
         S2[Servidor B]
-        S1 -- "Heartbeat + Carga (SERVER:ALIVE)" --- S2
     end
 
-    subgraph "Cluster de Workers"
+    subgraph "Pool de Workers"
+        W1[Worker 1]
+        W2[Worker 2]
+    end
+    
+    DB[(Banco de Dados MySQL)]
+
+    %% Fluxo de Comunicação Principal
+    W1 -- "1. Conexão Inicial" --> S1
+    S1 -- "2. Envia Tarefa" --> W1
+    W1 -- "3. Executa Query/Update" --> DB
+    W1 -- "4. Devolve Resultado" --> S1
+    S1 -- "5. Envia Próxima Tarefa (Ciclo)" --> W1
+    
+    %% Comunicação entre Servidores
+    S1 <-.->|Heartbeat| S2
+
+    %% Fluxo de Balanceamento de Carga (Redirecionamento)
+    subgraph "Fluxo de Redirecionamento"
         direction LR
-        W1[Worker]
-        W2[Worker]
-        W3[Worker]
-        W4[Worker]
+        S1_load("S1 (Saturado)") -.->|A. Pede Workers| S2_load(S2)
+        S2_load -.->|B. Ordena Redirecionamento| W2_load(W2)
+        W2_load -->|C. Reconecta em S1| S1_load
     end
-
-        S1 -- "Distribui Tarefas" --> W1
-        S1 -- "Distribui Tarefas" --> W2
-        S2 -- "Distribui Tarefas" --> W3
-        S2 -- "Distribui Tarefas" --> W4
-
-        W1 -- "Executa Query/Update (fictício)" --> S1
-        W2 -- "Executa Query/Update (fictício)" --> S1
-        W3 -- "Executa Query/Update (fictício)" --> S2
-        W4 -- "Executa Query/Update (fictício)" --> S2
-
-        W1 -- "Pode ser redirecionado para S2 se S1 estiver saturado" --> S2
+    
+    %% Conexão inicial do Worker 2
+    W2 -- "Conectado a S2" --> S2
 ```
+
 ### 📡 Tabela Resumo do Protocolo de Aplicação
 
 

@@ -1,0 +1,7 @@
+14:52:51 | WARNING | [HEARTBEAT] Tentativa 1/5 para SERVER_8766 falhou: [WinError 10061] Nenhuma conexão pôde ser feita porque a máquina de destino as recusou ativamente
+14:52:55 | WARNING | [HEARTBEAT] Tentativa 2/5 para SERVER_8766 falhou: [WinError 10061] Nenhuma conexão pôde ser feita porque a máquina de destino as recusou ativamente
+14:52:59 | WARNING | [HEARTBEAT] Tentativa 3/5 para SERVER_8766 falhou: [WinError 10061] Nenhuma conexão pôde ser feita porque a máquina de destino as recusou ativamente
+14:53:03 | WARNING | [HEARTBEAT] Tentativa 4/5 para SERVER_8766 falhou: [WinError 10061] Nenhuma conexão pôde ser feita porque a máquina de destino as recusou ativamente
+14:53:07 | WARNING | [HEARTBEAT] Tentativa 5/5 para SERVER_8766 falhou: [WinError 10061] Nenhuma conexão pôde ser feita porque a máquina de destino as recusou ativamente
+14:53:07 | ERROR   | [HEARTBEAT] Todas as 5 tentativas para SERVER_8766 falharam.
+14:53:07 | WARNING | Removendo o peer inativo SERVER_8766 da lista de verificação.

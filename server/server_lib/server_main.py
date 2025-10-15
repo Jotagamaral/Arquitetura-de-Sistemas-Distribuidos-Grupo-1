@@ -2,9 +2,9 @@ import socket
 import threading
 import json
 import time
-from .config import MY_IP, MY_PORT, MY_ID, lista_peers, IDLE_WORKER_THRESHOLD
-from .state import peer_status, status_lock, worker_status, redirect_queue, record_task_completion
-from .logger import logger
+from .server_config import MY_IP, MY_PORT, MY_ID, lista_peers, IDLE_WORKER_THRESHOLD
+from .server_state import peer_status, status_lock, worker_status, redirect_queue, record_task_completion
+from .server_logger import logger
 from random import randint
 
 def handle_connection(conn: socket.socket, addr):

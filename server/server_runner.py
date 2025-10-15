@@ -3,15 +3,15 @@ server_runner.py
 Arquivo principal para rodar o servidor. Pode ser duplicado para criar múltiplos servidores, basta alterar as configurações em server_lib/config.py.
 """
 
-from server_lib.config import MY_IP, MY_PORT, MY_ID, PEER_SERVERS, HEARTBEAT_INTERVAL, HEARTBEAT_TIMEOUT
-from server_lib.state import peer_status, status_lock
-from server_lib.heartbeat import heartbeat_loop
+from server_lib.server_config import MY_IP, MY_PORT, MY_ID, PEER_SERVERS, HEARTBEAT_INTERVAL, HEARTBEAT_TIMEOUT
+from server_lib.server_state import peer_status, status_lock
+from server_lib.server_heartbeat import heartbeat_loop
 from server_lib.server_main import server_listen_loop
-from server_lib.monitor import timeout_monitor
-from server_lib.load_balancer import load_balancer_loop
+from server_lib.server_monitor import timeout_monitor
+from server_lib.server_load_balancer import load_balancer_loop
 import threading
 import time
-from server_lib.logger import logger
+from server_lib.server_logger import logger
 
 if __name__ == "__main__":
     try:

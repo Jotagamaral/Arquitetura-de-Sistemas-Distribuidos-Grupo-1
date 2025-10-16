@@ -5,11 +5,11 @@ Configurações e parâmetros do servidor. Edite conforme necessário para cada 
 
 MY_IP = '127.0.0.1'
 MY_PORT = 8765
-MY_ID = f'SERVER_{MY_PORT}'
+MY_ID = f'SERVER_1'
 
 # Configuração para conexão com Servers
 PEER_SERVERS = [
-    {'ip': '127.0.0.1', 'port': 8766, 'id': f'SERVER_8766'},
+    {'ip': '127.0.0.1', 'port': 8766, 'id': f'SERVER_2'},
 ]
 
 lista_peers = list(PEER_SERVERS) # Lista de peers dinâmica

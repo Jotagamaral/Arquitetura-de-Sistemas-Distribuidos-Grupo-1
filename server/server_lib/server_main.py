@@ -2,9 +2,9 @@ import socket
 import threading
 import json
 import time
-from .server_config import MY_IP, MY_PORT, MY_ID, lista_peers, IDLE_WORKER_THRESHOLD
-from .server_state import peer_status, status_lock, worker_status, redirect_queue, record_task_completion
-from .server_logger import logger
+from .config import MY_IP, MY_PORT, MY_ID, lista_peers, IDLE_WORKER_THRESHOLD
+from .state import peer_status, status_lock, worker_status, redirect_queue, record_task_completion
+from .logger import logger
 from random import randint
 
 def handle_connection(conn: socket.socket, addr):
@@ -53,49 +53,7 @@ def handle_connection(conn: socket.socket, addr):
                         logger.warning(f"Primeira mensagem de {addr} não identificada: {data}")
                         break
 
-                # --- PROCESSAMENTO DE MENSAGENS ---
-
-                # # Se a conexão é de um WORKER
-                # if connection_type == "WORKER":
-                #     # 1. Verifica se há uma ordem de redirecionamento para este worker
-                #     order_to_remove = None
-                #     with status_lock:
-
-                #         for order in redirect_queue:
-
-                #             if order['worker_id'] == entity_id:
-
-                #                 target_server = order['target_server']
-                #                 redirect_msg = {"MASTER": MY_ID, "TASK": "REDIRECT", "MASTER_REDIRECT": [target_server['ip'], target_server['port']]}
-
-                #                 logger.warning(f"[LOAD] Ordenando worker {entity_id} a redirecionar para {target_server}")
-                #                 conn.sendall(json.dumps(redirect_msg).encode('utf-8'))
-                #                 order_to_remove = order
-
-                #                 break # Worker será desconectado, encerra o loop
-                    
-                #     if order_to_remove:
-                #         with status_lock:
-                #             redirect_queue.remove(order_to_remove)
-                #         break # Sai do loop while para fechar a conexão
-
-                #     # 2. Se não houver redirect, processa a mensagem normalmente
-                #     if data.get("WORKER") == "ALIVE":
-                #         with status_lock:
-                #             worker_status[entity_id] = {'addr': addr, 'last_seen': time.time(), 'conn': conn}
-                        
-                #         lista_users = ['Arthur', 'Carlos', 'Michel', 'Maria', 'Fernanda', 'Joao']
-                #         task_msg = {"TASK": "QUERY", "USER": lista_users[randint(0, 5)]}
-                        
-                #         logger.info(f"[SERVER] Enviando tarefa para worker {entity_id}: {task_msg}")
-                #         conn.sendall(json.dumps(task_msg).encode('utf-8'))
-                    
-                #     elif data.get("STATUS"):
-                #         logger.info(f"[SERVER] Resultado recebido de {entity_id}: {data}")
-                #         record_task_completion()
-                #         with status_lock: # Atualiza o 'last_seen' do worker
-                #             if entity_id in worker_status:
-                #                 worker_status[entity_id]['last_seen'] = time.time()
+              
 
                 # --- NOVO TRECHO DA LÓGICA DO WORKER ---
                 if connection_type == "WORKER":
@@ -161,7 +119,7 @@ def handle_connection(conn: socket.socket, addr):
 
                     with status_lock:
                         for wid, winfo in worker_status.items():
-                            if True: #(now - winfo.get('last_seen', 0)) >= IDLE_WORKER_THRESHOLD:
+                            if (now - winfo.get('last_seen', 0)) >= IDLE_WORKER_THRESHOLD:
                                 idle_candidates.append({'id': wid})
                     
                     if idle_candidates:

@@ -16,5 +16,6 @@ def timeout_monitor():
         with status_lock:
             for peer_id, info in list(peer_status.items()):
                 if (now - info['last_alive']) > HEARTBEAT_TIMEOUT:
-                    logger.warning(f"!!! Peer {peer_id} está INATIVO (timeout) !!!")
+                    logger.warning(f"Peer {peer_id} está inativo (timeout)")
                     del peer_status[peer_id]
+                    logger.warning(f"Peer {peer_id} deletado da lista de peers")

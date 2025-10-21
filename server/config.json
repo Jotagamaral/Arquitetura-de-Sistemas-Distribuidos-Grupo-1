@@ -1,0 +1,22 @@
+{
+  "server": {
+    "ip": "127.0.0.1",
+    "port": 8765,
+    "id_number": "1"
+  },
+  "peers": [
+    {"ip": "127.0.0.1", "port": 8766, "id": "SERVER_2"}
+  ],
+  "timing": {
+    "heartbeat_interval": 10,
+    "heartbeat_timeout": 25,
+    "heartbeat_retries": 5,
+    "heartbeat_retry_delay": 2,
+    "load_balancer_interval": 10
+  },
+  "load_balancing": {
+    "threshold_window": 20,
+    "threshold_min_tasks": 2,
+    "idle_worker_threshold": 20
+  }
+}

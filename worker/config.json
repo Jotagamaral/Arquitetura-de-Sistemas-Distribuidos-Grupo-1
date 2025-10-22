@@ -2,7 +2,7 @@
   "worker_id": "WORKER_01",
   "home_master": {
     "ip": "127.0.0.1",
-    "port": 8765
+    "port": 8766
   },
   "timing": {
     "reconnect_delay": 10

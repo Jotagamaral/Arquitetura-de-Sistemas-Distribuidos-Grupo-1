@@ -68,8 +68,10 @@ class BackgroundTasksMixin:
     def _load_balancer_loop(self):
         """Verifica carga e pede workers (agora é um método)."""
         interval = self.config['timing']['load_balancer_interval']
-        min_tasks = self.config['load_balancing']['threshold_min_tasks']
-        window = self.config['load_balancing']['threshold_window']
+        config_lb = self.config['load_balancing']
+        min_tasks = config_lb['threshold_min_tasks']
+        return_tasks = config_lb.get('threshold_return_tasks', min_tasks + 5)
+        window = config_lb['threshold_window']
 
         while self._running:
              # Dorme primeiro
@@ -89,13 +91,71 @@ class BackgroundTasksMixin:
                         active_peers_snapshot = list(self.active_peers)
 
                     if not active_peers_snapshot:
-                        logger.info("[LOAD] Nenhum peer ativo para solicitar workers.")
+                        logger.error("[LOAD] Nenhum peer ativo para solicitar workers.")
                         continue
 
                     for peer in active_peers_snapshot:
                          if not self._running: break # Permite parada rápida
                          # Chama o método da classe para pedir workers
                          self._ask_peer_for_workers(peer)
+                
+                # CASO 2: Carga CONFORTÁVEL (Abaixo de 'Return') -> DEVOLVER (NOTIFICAR)
+                elif count > return_tasks:
+                    logger.success(f"[LOAD] Carga confortável ({count} < {return_tasks}). Verificando workers para notificar devolução.")
+                    
+                    # --- NOVA LÓGICA DE NOTIFICAÇÃO ---
+                    
+                    # 1. Agrupa workers "emprestados" por seu dono (pelo IP/Porta)
+                    workers_to_release_by_owner = {} # (ip, port) -> [worker_id, ...]
+                    
+                    with self.lock:
+                        for wid, winfo in self.worker_status.items():
+                            # Verifica se é emprestado E se ainda não foi notificado
+                            if 'addr' in winfo and not winfo.get('release_notified', False):
+                                hm_info = winfo['addr']
+                                # Chave é o IP/Porta do dono
+                                owner_key = (hm_info[0], hm_info[1]) 
+                                
+                                if owner_key not in workers_to_release_by_owner:
+                                    workers_to_release_by_owner[owner_key] = []
+                                workers_to_release_by_owner[owner_key].append(wid)
+                    
+                    if not workers_to_release_by_owner:
+                        logger.info("[LOAD] Carga confortável, mas não há workers emprestados para notificar.")
+                        continue # Pula para o próximo ciclo do loop
+
+                    # 2. Encontra o 'peer object' (que tem o ID) para cada dono
+                    active_peers_snapshot = []
+                    with self.lock:
+                        active_peers_snapshot = list(self.active_peers)
+
+                    for owner_key, worker_ids in workers_to_release_by_owner.items():
+                        owner_ip, owner_port = owner_key
+                        
+                        target_peer = None
+                        for peer in active_peers_snapshot:
+                            if peer['ip'] == owner_ip and peer['port'] == owner_port:
+                                target_peer = peer
+                                break
+                        
+                        if target_peer:
+                            # 3. Envia a notificação
+                            # (Chama o novo método de client_actions.py)
+                            success = self._send_command_release(target_peer, worker_ids)
+                            
+                            if success:
+                                # 4. Marca os workers como 'notificados' para não
+                                # enviar de novo no próximo ciclo
+                                with self.lock:
+                                    for wid in worker_ids:
+                                        if wid in self.worker_status:
+                                            self.worker_status[wid]['release_notified'] = True
+                                            logger.info(f"Worker {wid} marcado como 'release_notified'.")
+                        else:
+                            logger.warning(f"[LOAD] Queria notificar {owner_ip}:{owner_port} sobre {worker_ids}, mas ele não está na lista de peers ativos.")
+
+                else:
+                    logger.success(f"[LOAD] Acima e próximo do threshold ({count} <= {min_tasks}) (mínimo de task limite: {return_tasks}), não necessita de mais workers.")
 
             except Exception as e:
                 logger.error(f"[LOAD] Erro no loop: {e}")

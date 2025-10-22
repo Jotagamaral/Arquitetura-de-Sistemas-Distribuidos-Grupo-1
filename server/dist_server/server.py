@@ -64,8 +64,8 @@ class Server(ConnectionHandlerMixin,
         # Métodos _loop (ex: _listen_loop) vêm dos Mixins!
         thread_targets = {
             "Listener": self._listen_loop,
-            "Heartbeat": self._heartbeat_loop,
-            "Monitor": self._monitor_loop,
+            # "Heartbeat": self._heartbeat_loop,
+            # "Monitor": self._monitor_loop,
             "LoadBalancer": self._load_balancer_loop
         }
 

@@ -62,15 +62,55 @@ class ClientActionsMixin:
                     return []
                 
                 data = json.loads(response_line)
-                if data.get('RESPONSE') == 'OK': 
+                if data.get('RESPONSE') == 'AVAILABLE': 
                     logger.success(f"[LOAD] Peer {peer['id']} respondeu OK ao pedido de workers.")
                     return [] 
+                
                 elif data.get('RESPONSE') == 'UNAVAILABLE':
                     logger.info(f"[LOAD] Peer {peer['id']} não tem workers disponíveis.")
                     return []
+                
                 else:
                     logger.warning(f"[LOAD] Resposta inesperada de {peer['id']}: {data}")
                     return []
         except Exception as e:
             logger.warning(f"[LOAD] Falha ao perguntar para peer {peer['id']}: {e}")
             return []
+
+    def _send_command_release(self, peer: dict, worker_ids: list) -> bool:
+        """
+        Envia uma notificação COMMAND_RELEASE para um peer (dono original).
+        Retorna True se o peer confirmar com RELEASE_ACK.
+        """
+        try:
+            # Constrói o payload 5.1
+            msg = {
+                "MASTER": self.id,
+                "TASK": "COMMAND_RELEASE",
+                "WORKERS": worker_ids # Lista de IDs dos workers
+            }
+            logger.info(f"[RELEASE] Notificando {peer['id']} sobre liberação de {len(worker_ids)} workers.")
+
+            with socket.create_connection((peer['ip'], peer['port']), timeout=5) as s:
+                s.sendall((json.dumps(msg) + '\n').encode('utf-8')) # Adiciona \n
+
+                reader = s.makefile('r', encoding='utf-8')
+                response_line = reader.readline()
+
+                if not response_line:
+                    logger.warning(f"[RELEASE] Sem resposta de {peer['id']} para COMMAND_RELEASE.")
+                    return False
+                
+                data = json.loads(response_line)
+                
+                # Espera pelo payload 5.2
+                if data.get('RESPONSE') == 'RELEASE_ACK':
+                    logger.success(f"[RELEASE] {peer['id']} confirmou recebimento (RELEASE_ACK) para {data.get('WORKERS', [])}.")
+                    return True
+                else:
+                    logger.warning(f"[RELEASE] Resposta inesperada de {peer['id']}: {data}")
+                    return False
+                    
+        except Exception as e:
+            logger.warning(f"[RELEASE] Falha ao enviar COMMAND_RELEASE para {peer['id']}: {e}")
+            return False

@@ -15,8 +15,10 @@
     "load_balancer_interval": 10
   },
   "load_balancing": {
-    "threshold_window": 20,
     "threshold_min_tasks": 2,
-    "idle_worker_threshold": 20
+    "threshold_return_tasks": 4,
+    "threshold_window": 10,
+    "idle_worker_threshold": 30,
+    "min_workers_before_sharing": 0
   }
 }

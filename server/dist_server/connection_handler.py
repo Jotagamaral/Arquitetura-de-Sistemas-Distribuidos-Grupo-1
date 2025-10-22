@@ -72,14 +72,38 @@ class ConnectionHandlerMixin:
                                 connection_type = "SERVER"
                                 entity_id = data.get("SERVER_ID")
                                 logger.info(f"Conexão identificada como SERVER: {entity_id}")
+
                             elif "WORKER" in data and "WORKER_ID" in data:
                                 connection_type = "WORKER"
                                 entity_id = data.get("WORKER_ID")
                                 logger.info(f"Conexão identificada como WORKER: {entity_id}")
+
                             elif task == "WORKER_REQUEST" and "MASTER" in data:
                                 connection_type = "SERVER_REQUEST"
                                 entity_id = data.get("MASTER")
                                 logger.info(f"Conexão identificada como WORKER_REQUEST do SERVER: {entity_id}")
+                                
+                            elif task == "COMMAND_RELEASE" and "MASTER" in data:
+                                connection_type = "SERVER_RELEASE"
+                                entity_id = data.get("MASTER")
+                                logger.info(f"Conexão identificada como COMMAND_RELEASE do SERVER: {entity_id}")
+                                
+                                # Processa a liberação e responde imediatamente
+                                workers_list = data.get("WORKERS", [])
+                                logger.success(f"Recebida notificação de {entity_id} para liberar {len(workers_list)} workers: {workers_list}")
+                                
+                                # (Aqui você adicionará sua lógica para lidar com
+                                # a devolução quando ela for implementada)
+                                
+                                # Constrói o payload 5.2 (Confirmação)
+                                response = {
+                                    "MASTER": self.id,
+                                    "RESPONSE": "RELEASE_ACK",
+                                    "WORKERS": workers_list 
+                                }
+                                conn.sendall((json.dumps(response) + '\n').encode('utf-8'))
+                                break # Encerra a conexão
+                            
                             else:
                                 logger.warning(f"Primeira mensagem não identificada: {data}")
                                 break
@@ -124,21 +148,68 @@ class ConnectionHandlerMixin:
                                 logger.info(f"Enviando próxima tarefa para {entity_id}: {next_task_msg}")
                                 conn.sendall((json.dumps(next_task_msg) + '\n').encode('utf-8'))
 
-                        # Exemplo: Lógica de WORKER_REQUEST
+                        # Exemplo: Lógica de WORKER_REQUEST (MODIFICADA)
                         elif connection_type == "SERVER_REQUEST" and task == "WORKER_REQUEST":
                             master_id = data.get("MASTER")
-                            requestor_info = data.get("REQUESTOR_INFO") 
+                            requestor_info = data.get("REQUESTOR_INFO")
                             
-                            idle_candidates = self._find_idle_workers() # Chama método helper
+                            if not requestor_info:
+                                logger.warning(f"Pedido de {master_id} sem 'REQUESTOR_INFO'. Ignorando.")
+                                break # Encerra sem resposta
 
-                            if idle_candidates and requestor_info:
-                                worker_to_move = idle_candidates[0]
-                                redirect_order = {'worker_id': worker_to_move['id'], 'target_server': requestor_info}
-                                with self.lock:
-                                    self.redirect_queue.append(redirect_order)
-                                logger.success(f"Worker {worker_to_move['id']} agendado para redirect para {master_id}")
-                                response = {"MASTER": self.id, "RESPONSE": "OK"}
+                            # --- NOVA LÓGICA DE DECISÃO DE COMPARTILHAMENTO ---
+                            
+                            # 1. Obter métricas de configuração
+                            config_lb = self.config['load_balancing']
+                            window = config_lb['threshold_window']
+                            min_tasks_threshold = config_lb['threshold_min_tasks']
+                            min_workers_to_keep = config_lb.get('min_workers_before_sharing', 2) # Padrão 2 se não estiver no config
+
+                            # 2. Obter métricas de estado ATUAIS
+                            #    (self._tasks_completed_in_window já lida com seu próprio lock)
+                            current_task_count = self._tasks_completed_in_window(window)
+                            
+                            current_worker_count = 0
+                            with self.lock: # Protege a leitura de self.worker_status
+                                current_worker_count = len(self.worker_status)
+
+                            # 3. Lógica de decisão
+                            can_share = False
+                            if current_worker_count < min_workers_to_keep:
+                                # Não compartilha se tiver menos que o mínimo de workers
+                                logger.info(f"[REQUEST] Pedido de {master_id} negado: contagem de workers ({current_worker_count}) abaixo do mínimo ({min_workers_to_keep}).")
+                            elif current_task_count < min_tasks_threshold:
+                                # Não compartilha se a carga JÁ ESTIVER baixa
+                                # (Se a carga está baixa, nós mesmos precisamos dos workers!)
+                                logger.info(f"[REQUEST] Pedido de {master_id} negado: carga atual ({current_task_count}) abaixo do threshold ({min_tasks_threshold}).")
                             else:
+                                # Carga está saudável E temos workers suficientes para compartilhar.
+                                logger.success(f"[REQUEST] Pedido de {master_id} APROVADO.")
+                                can_share = True
+
+                            # --- FIM DA NOVA LÓGICA ---
+
+                            if can_share:
+                                # Pega *qualquer* worker. Como todos estão ocupados,
+                                # simplesmente pegar o primeiro da lista é suficiente.
+                                worker_to_move_id = None
+                                with self.lock:
+                                    if self.worker_status: # Checagem extra de segurança
+                                        worker_to_move_id = list(self.worker_status.keys())[0] 
+                                
+                                if worker_to_move_id:
+                                    redirect_order = {'worker_id': worker_to_move_id, 'target_server': requestor_info}
+                                    with self.lock:
+                                        self.redirect_queue.append(redirect_order)
+                                    logger.success(f"Worker {worker_to_move_id} agendado para redirect para {master_id}")
+                                    response = {"MASTER": self.id, "RESPONSE": "AVAILABLE", "WORKER_UUID": [worker_to_move_id]}
+                                else:
+                                    # Caso raro: 'can_share' foi True, mas no exato momento
+                                    # de pegar o worker, a lista estava vazia.
+                                    logger.warning(f"[REQUEST] Pedido de {master_id} aprovado, mas sem workers para enviar.")
+                                    response = {"MASTER": self.id, "RESPONSE": "UNAVAILABLE",  "WORKER_UUID": []}
+                            else:
+                                # 'can_share' foi False
                                 response = {"MASTER": self.id, "RESPONSE": "UNAVAILABLE"}
                             
                             conn.sendall((json.dumps(response) + '\n').encode('utf-8'))

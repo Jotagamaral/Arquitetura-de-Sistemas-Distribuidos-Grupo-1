@@ -30,7 +30,7 @@ class ConnectionLoopMixin:
                     reader = client_socket.makefile('r', encoding='utf-8')
 
                     # Envia mensagem inicial de identificação
-                    presentation_message = {"WORKER": "ALIVE", "WORKER_ID": self.worker_id}
+                    presentation_message = {"WORKER": "ALIVE", "WORKER_ID": self.worker_id, "OWNER_ID": self.owner_id}
                     
                     # **CORREÇÃO DE BUG:** Adiciona '\n' e flush
                     writer.write(json.dumps(presentation_message) + '\n')

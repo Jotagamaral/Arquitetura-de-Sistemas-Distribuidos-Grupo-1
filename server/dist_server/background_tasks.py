@@ -67,6 +67,7 @@ class BackgroundTasksMixin:
 
     def _load_balancer_loop(self):
         """Verifica carga e pede workers (agora é um método)."""
+
         interval = self.config['timing']['load_balancer_interval']
         config_lb = self.config['load_balancing']
         min_tasks = config_lb['threshold_min_tasks']
@@ -78,6 +79,7 @@ class BackgroundTasksMixin:
             for _ in range(interval):
                 if not self._running: break
                 time.sleep(1)
+
             if not self._running: break
 
             try:
@@ -101,6 +103,7 @@ class BackgroundTasksMixin:
                 
                 # CASO 2: Carga CONFORTÁVEL (Abaixo de 'Return') -> DEVOLVER (NOTIFICAR)
                 elif count > return_tasks:
+
                     logger.success(f"[LOAD] Carga confortável ({count} < {return_tasks}). Verificando workers para notificar devolução.")
                     
                     # --- NOVA LÓGICA DE NOTIFICAÇÃO ---
@@ -113,8 +116,9 @@ class BackgroundTasksMixin:
                             # Verifica se é emprestado E se ainda não foi notificado
                             if 'addr' in winfo and not winfo.get('release_notified', False):
                                 hm_info = winfo['addr']
+                                hm_id = winfo['OWNER_ID']
                                 # Chave é o IP/Porta do dono
-                                owner_key = (hm_info[0], hm_info[1]) 
+                                owner_key = (hm_info[0], hm_info[1], hm_id) 
                                 
                                 if owner_key not in workers_to_release_by_owner:
                                     workers_to_release_by_owner[owner_key] = []
@@ -130,11 +134,11 @@ class BackgroundTasksMixin:
                         active_peers_snapshot = list(self.active_peers)
 
                     for owner_key, worker_ids in workers_to_release_by_owner.items():
-                        owner_ip, owner_port = owner_key
+                        owner_ip, owner_port, owner_id = owner_key
                         
                         target_peer = None
                         for peer in active_peers_snapshot:
-                            if peer['ip'] == owner_ip and peer['port'] == owner_port:
+                            if peer['id'] == owner_id:
                                 target_peer = peer
                                 break
                         

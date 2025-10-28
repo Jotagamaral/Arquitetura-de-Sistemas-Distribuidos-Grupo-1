@@ -110,6 +110,15 @@ class ClientActionsMixin:
                 else:
                     logger.warning(f"[RELEASE] Resposta inesperada de {peer['id']}: {data}")
                     return False
+                
+
+            # FAZER AQUI A LÓGICA DE MANDAR MSG PARA WORKER
+            # {
+            #   "MASTER": "[ID_i]",
+            #   "TASK": "RETURN",
+            #   "MASTER_RETURN": "[ID_i]"
+            # }
+            
                     
         except Exception as e:
             logger.warning(f"[RELEASE] Falha ao enviar COMMAND_RELEASE para {peer['id']}: {e}")

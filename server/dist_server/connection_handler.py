@@ -131,7 +131,7 @@ class ConnectionHandlerMixin:
                             # 2. Processa mensagem do worker
                             if data.get("WORKER") == "ALIVE":
                                 with self.lock:
-                                    self.worker_status[entity_id] = {'addr': addr, 'last_seen': time.time()}
+                                    self.worker_status[entity_id] = {'addr': addr, 'OWNER_ID': data.get('OWNER_ID'), 'last_seen': time.time()}
                                 lista_users = ['Arthur', 'Carlos', 'Michel', 'Maria', 'Fernanda', 'Joao']
                                 task_msg = {"TASK": "QUERY", "USER": lista_users[randint(0, 5)]}
                                 logger.info(f"Enviando tarefa para {entity_id}: {task_msg}")

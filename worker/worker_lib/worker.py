@@ -21,6 +21,7 @@ class Worker(ConnectionLoopMixin, TaskProcessorMixin):
         # 2. Define atributos a partir do config carregado
         try:
             self.worker_id = self.config['worker_id']
+            self.owner_id = self.config['home_master']['id']
             self.reconnect_delay = self.config['timing']['reconnect_delay']
             
             self.home_master: Dict[str, any] = {

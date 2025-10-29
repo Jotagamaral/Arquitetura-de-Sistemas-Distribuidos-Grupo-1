@@ -65,9 +65,11 @@ class ClientActionsMixin:
                 if data.get('RESPONSE') == 'AVAILABLE': 
                     logger.success(f"[LOAD] Peer {peer['id']} respondeu OK ao pedido de workers.")
                     return [] 
+                
                 elif data.get('RESPONSE') == 'UNAVAILABLE':
                     logger.info(f"[LOAD] Peer {peer['id']} não tem workers disponíveis.")
                     return []
+                
                 else:
                     logger.warning(f"[LOAD] Resposta inesperada de {peer['id']}: {data}")
                     return []
@@ -104,10 +106,15 @@ class ClientActionsMixin:
                 # Espera pelo payload 5.2
                 if data.get('RESPONSE') == 'RELEASE_ACK':
                     logger.success(f"[RELEASE] {peer['id']} confirmou recebimento (RELEASE_ACK) para {data.get('WORKERS', [])}.")
+                    
                     return True
                 else:
                     logger.warning(f"[RELEASE] Resposta inesperada de {peer['id']}: {data}")
                     return False
+                
+
+           
+            
                     
         except Exception as e:
             logger.warning(f"[RELEASE] Falha ao enviar COMMAND_RELEASE para {peer['id']}: {e}")

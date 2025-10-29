@@ -67,6 +67,7 @@ class BackgroundTasksMixin:
 
     def _load_balancer_loop(self):
         """Verifica carga e pede workers (agora é um método)."""
+
         interval = self.config['timing']['load_balancer_interval']
         config_lb = self.config['load_balancing']
         min_tasks = config_lb['threshold_min_tasks']
@@ -78,6 +79,7 @@ class BackgroundTasksMixin:
             for _ in range(interval):
                 if not self._running: break
                 time.sleep(1)
+
             if not self._running: break
 
             try:
@@ -99,63 +101,77 @@ class BackgroundTasksMixin:
                          # Chama o método da classe para pedir workers
                          self._ask_peer_for_workers(peer)
                 
-                # CASO 2: Carga CONFORTÁVEL (Abaixo de 'Return') -> DEVOLVER (NOTIFICAR)
+                # CASO 2: Carga ALTA (Acima de 'Return') -> DEVOLVER (NOTIFICAR E AGENDAR)
                 elif count > return_tasks:
-                    logger.info(f"[LOAD] Carga confortável ({count} < {return_tasks}). Verificando workers para notificar devolução.")
+                    logger.success(f"[LOAD] Carga alta ({count} > {return_tasks}). Verificando workers para devolver.")
                     
-                    # --- NOVA LÓGICA DE NOTIFICAÇÃO ---
+                    # 1. Agrupa workers "emprestados" por seu dono (pelo ID do dono)
+                    #    Precisamos guardar o ID do dono E o dict do home_master
+                    workers_to_release_by_owner = {} # key: 'SERVER_2', value: [{'id': 'W_01', 'home_master': {...}}]
                     
-                    # 1. Agrupa workers "emprestados" por seu dono (pelo IP/Porta)
-                    workers_to_release_by_owner = {} # (ip, port) -> [worker_id, ...]
-                    
-                    with self.lock:
-                        for wid, winfo in self.worker_status.items():
-                            # Verifica se é emprestado E se ainda não foi notificado
-                            if 'home_master' in winfo and not winfo.get('release_notified', False):
-                                hm_info = winfo['home_master']
-                                # Chave é o IP/Porta do dono
-                                owner_key = (hm_info['ip'], hm_info['port']) 
-                                
-                                if owner_key not in workers_to_release_by_owner:
-                                    workers_to_release_by_owner[owner_key] = []
-                                workers_to_release_by_owner[owner_key].append(wid)
-                    
-                    if not workers_to_release_by_owner:
-                        logger.info("[LOAD] Carga confortável, mas não há workers emprestados para notificar.")
-                        continue # Pula para o próximo ciclo do loop
-
-                    # 2. Encontra o 'peer object' (que tem o ID) para cada dono
                     active_peers_snapshot = []
                     with self.lock:
                         active_peers_snapshot = list(self.active_peers)
 
-                    for owner_key, worker_ids in workers_to_release_by_owner.items():
-                        owner_ip, owner_port = owner_key
+                    with self.lock:
+                        for wid, winfo in self.worker_status.items():
+                            # ---- CORREÇÃO IMPORTANTE ----
+                            # Você precisa do 'home_master' (o dict) e do 'home_master_id' (o ID do server)
+                            # Assumindo que você salva 'home_master_id' no _handle_connection
+                            if 'OWNER_ID' in winfo and not winfo.get('release_notified', False):
+                                
+                                owner_id = winfo['OWNER_ID']   # O string 'SERVER_2'
+                                # ---- FIM DA CORREÇÃO ----
+                                
+                                if owner_id not in workers_to_release_by_owner:
+                                    workers_to_release_by_owner[owner_id] = []
+                                workers_to_release_by_owner[owner_id].append({'id': wid})
+                    
+                    if not workers_to_release_by_owner:
+                        logger.info("[LOAD] Carga alta, mas não há workers (cujo dono está ativo) para notificar.")
+                        continue
+
+                    # 2. Encontra o 'peer object' (que tem o ID) para cada dono
+                    for owner_id, worker_list in workers_to_release_by_owner.items():
                         
                         target_peer = None
                         for peer in active_peers_snapshot:
-                            if peer['ip'] == owner_ip and peer['port'] == owner_port:
+                            if peer['id'] == owner_id:
                                 target_peer = peer
                                 break
                         
                         if target_peer:
                             # 3. Envia a notificação
-                            # (Chama o novo método de client_actions.py)
-                            success = self._send_command_release(target_peer, worker_ids)
+                            worker_ids_to_notify = [w['id'] for w in worker_list]
+                            success = self._send_command_release(target_peer, worker_ids_to_notify)
                             
+                            # 4. AÇÃO PÓS-CONFIRMAÇÃO (O que você pediu)
                             if success:
-                                # 4. Marca os workers como 'notificados' para não
-                                # enviar de novo no próximo ciclo
+                                logger.success(f"[LOAD] Peer {target_peer['id']} confirmou liberação. Agendando devolução...")
+                                
+                                # 5. Adiciona workers à fila de redirect
                                 with self.lock:
-                                    for wid in worker_ids:
-                                        if wid in self.worker_status:
+                                    for worker_info in worker_list:
+                                        wid = worker_info['id']
+                                        
+                                        if wid in self.worker_status: # Checa de novo (pode ter caído)
+                                            # 5a. Marca como notificado
                                             self.worker_status[wid]['release_notified'] = True
-                                            logger.info(f"Worker {wid} marcado como 'release_notified'.")
+                                            
+                                            # 5b. AGENDA A DEVOLUÇÃO
+                                            redirect_order = {
+                                                'worker_id': wid,
+                                                'target_server': target_peer['id'],
+                                                'TASK': 'RETURN' # Novo tipo de redirect
+                                            }
+                                            self.redirect_queue.append(redirect_order)
+                                            logger.info(f"Worker {wid} agendado para RETORNAR para {target_peer['id']}.")
                         else:
-                            logger.warning(f"[LOAD] Queria notificar {owner_ip}:{owner_port} sobre {worker_ids}, mas ele não está na lista de peers ativos.")
+                            logger.warning(f"[LOAD] Queria notificar {owner_id}, mas ele não está na lista de peers ativos.")
 
+                # CASO 3: Carga normal
                 else:
-                    logger.success(f"[LOAD] Acima e próximo do threshold ({count} <= {min_tasks}) (mínimo de task limite: {return_tasks}), não necessita de mais workers.")
+                    logger.info(f"[LOAD] Carga estável ({min_tasks} <= {count} <= {return_tasks}). Nenhuma ação.")
 
             except Exception as e:
-                logger.error(f"[LOAD] Erro no loop: {e}")
+                logger.error(f"[LOAD] Erro no loop: {e}", exc_info=True)

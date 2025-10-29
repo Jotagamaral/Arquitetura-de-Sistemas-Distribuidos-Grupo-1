@@ -106,18 +106,14 @@ class ClientActionsMixin:
                 # Espera pelo payload 5.2
                 if data.get('RESPONSE') == 'RELEASE_ACK':
                     logger.success(f"[RELEASE] {peer['id']} confirmou recebimento (RELEASE_ACK) para {data.get('WORKERS', [])}.")
+                    
                     return True
                 else:
                     logger.warning(f"[RELEASE] Resposta inesperada de {peer['id']}: {data}")
                     return False
                 
 
-            # FAZER AQUI A LÓGICA DE MANDAR MSG PARA WORKER
-            # {
-            #   "MASTER": "[ID_i]",
-            #   "TASK": "RETURN",
-            #   "MASTER_RETURN": "[ID_i]"
-            # }
+           
             
                     
         except Exception as e:

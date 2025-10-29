@@ -44,8 +44,10 @@ class ConnectionHandlerMixin:
 
     def _handle_connection(self, conn: socket.socket, addr):
         """Lida com uma conexão de entrada (agora é um método)."""
+
         connection_type = "UNKNOWN"
         entity_id = None
+
         # Adiciona contexto do cliente aos logs desta thread
         with logger.contextualize(client_addr=f"{addr[0]}:{addr[1]}"):
             try:
@@ -68,15 +70,48 @@ class ConnectionHandlerMixin:
 
                         # --- LÓGICA DE IDENTIFICAÇÃO (PRIMEIRA MENSAGEM) ---
                         if connection_type == "UNKNOWN":
+
                             if task == "HEARTBEAT" and "SERVER_ID" in data:
+
                                 connection_type = "SERVER"
                                 entity_id = data.get("SERVER_ID")
+
                                 logger.info(f"Conexão identificada como SERVER: {entity_id}")
 
                             elif "WORKER" in data and "WORKER_ID" in data:
+
                                 connection_type = "WORKER"
                                 entity_id = data.get("WORKER_ID")
+
                                 logger.info(f"Conexão identificada como WORKER: {entity_id}")
+
+                                # --- Lógica de salvar 'home_master_id' ---
+                                # (Vamos garantir que isso está aqui)
+                                worker_info = {
+                                    'addr': addr, 
+                                    'last_seen': time.time()
+                                }
+                                if 'OWNER_ID' in data:
+                                    hm_data = data['OWNER_ID']
+                                    worker_info['OWNER_ID'] = hm_data # O dict {'ip':..., 'port':...}
+                                    
+                                    # Precisamos encontrar o ID do peer correspondente
+                                    hm_id = None
+                                    with self.lock: # Não precisa, mas é mais seguro
+                                        for peer in self.config['peers']: # Checa config estática
+                                            if peer['id'] == hm_data:
+                                                hm_id = peer['id']
+                                                break
+                                    
+                                    if hm_id:
+                                        worker_info['OWNER_ID'] = hm_id
+                                        logger.info(f"Worker {entity_id} registrado como 'EMPRESTADO' do dono: {hm_id}")
+                                    else:
+                                        logger.warning(f"Worker {entity_id} é emprestado de {hm_data}, mas não encontrei esse peer na config.")
+                                
+                                with self.lock:
+                                    self.worker_status[entity_id] = worker_info
+
 
                             elif task == "WORKER_REQUEST" and "MASTER" in data:
                                 connection_type = "SERVER_REQUEST"
@@ -115,11 +150,31 @@ class ConnectionHandlerMixin:
                             # 1. Verifica redirect
                             order_to_remove = None
                             with self.lock:
+
                                 for order in self.redirect_queue:
+
                                     if order['worker_id'] == entity_id:
+
                                         target_server = order['target_server']
-                                        redirect_msg = {"TASK": "REDIRECT", "MASTER_REDIRECT": target_server}
-                                        logger.warning(f"Ordenando redirect para {entity_id} -> {target_server}")
+                                        task_type = order.get('TASK', 'REDIRECT') # Padrão 'REDIRECT'
+                                        
+                                        # Monta a mensagem de payload
+                                        if task_type == 'RETURN':
+                                            # O payload que você queria
+                                            redirect_msg = {
+                                                "MASTER": self.id,
+                                                "TASK": "RETURN", 
+                                                "MASTER_RETURN": target_server # Envia o dict do dono
+                                            }
+                                            logger.warning(f"Ordenando RETORNO para {entity_id} -> {target_server}")
+                                        else:
+                                            # O redirect antigo
+                                            redirect_msg = {
+                                                "TASK": "REDIRECT", 
+                                                "MASTER_REDIRECT": target_server
+                                            }
+                                            logger.warning(f"Ordenando REDIRECT para {entity_id} -> {target_server['ip']}")
+
                                         conn.sendall((json.dumps(redirect_msg) + '\n').encode('utf-8'))
                                         order_to_remove = order
                                         break

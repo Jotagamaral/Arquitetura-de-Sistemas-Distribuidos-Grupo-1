@@ -25,20 +25,18 @@ class ConnectionLoopMixin:
                 with socket.create_connection((current_ip, current_port), timeout=5) as client_socket:
                     logger.info(f"Conectado com sucesso ao servidor {current_ip}:{current_port}")
 
-                    # **CORREÇÃO DE BUG:** Usar makefile para I/O baseada em linha
                     writer = client_socket.makefile('w', encoding='utf-8')
                     reader = client_socket.makefile('r', encoding='utf-8')
 
                     # Envia mensagem inicial de identificação
                     presentation_message = {"WORKER": "ALIVE", "WORKER_ID": self.worker_id, "OWNER_ID": self.owner_id}
                     
-                    # **CORREÇÃO DE BUG:** Adiciona '\n' e flush
                     writer.write(json.dumps(presentation_message) + '\n')
                     writer.flush()
 
                     # Loop de escuta e resposta
                     while self._running:
-                        # **CORREÇÃO DE BUG:** Lê linha por linha
+
                         line = reader.readline()
                         if not line:
                             logger.warning("Conexão encerrada pelo servidor. Tentando reconectar...")
@@ -59,12 +57,23 @@ class ConnectionLoopMixin:
                         # Se for redirecionamento, atualiza servidor mestre
                         elif task == "REDIRECT":
                             
-                            # **CORREÇÃO DE BUG:** Servidor envia um DICT, não uma LISTA
                             target = data.get("MASTER_REDIRECT") 
 
                             if target and 'ip' in target and 'port' in target:
                                 logger.warning(f"Redirecionando para novo mestre {target['ip']}:{target['port']}")
                                 self.current_master.update(target)
+                                break # Sai do loop interno para reconectar
+                            else:
+                                logger.error(f"REDIRECT sem destino ou formato inválido: {data}")
+
+                        # Se for redirecionamento, atualiza servidor mestre
+                        elif task == "RETURN":
+                            
+                            target = data.get("MASTER_RETURN") 
+
+                            if target and target == self.owner_id:
+                                logger.warning(f"Redirecionando para mestre original: {target}")
+                                self.current_master.update(self.home_master.copy())
                                 break # Sai do loop interno para reconectar
                             else:
                                 logger.error(f"REDIRECT sem destino ou formato inválido: {data}")

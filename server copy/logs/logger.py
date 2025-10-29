@@ -1,5 +1,5 @@
 """
-server_lib/logger.py
+logs/logger.py
 Configuração do logger global usando loguru.
 """
 from loguru import logger

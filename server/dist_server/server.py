@@ -6,7 +6,7 @@ import time
 from typing import Dict, List
 
 # Importa o logger do pacote (ou de onde ele estiver)
-from logs.logger import logger
+from logs.logger import logger, setup_file_logging
 # Importa os Mixins
 from .connection_handler import ConnectionHandlerMixin
 from .background_tasks import BackgroundTasksMixin
@@ -31,12 +31,23 @@ class Server(ConnectionHandlerMixin,
         self.active_peers: List[Dict] = list(self.config['peers'])
         self.redirect_queue: List[Dict] = []
         self.completed_task_timestamps: List[float] = []
-        self.lock = threading.Lock() # Lock único (como antes)
+
+        self.pending_returns: Dict[str, Dict] = {}
+
+        self.pending_release_attempts: Dict[str, float] = {}
+
+        self.task_queue: List[Dict] = []
+        self.lista_users = ['Arthur', 'Carlos', 'Michel', 'Maria', 'Fernanda', 'Joao'] # Para o produtor
+
+
+        self.lock = threading.Lock() # Lock único
 
         # Controle de Threads
         self._threads: List[threading.Thread] = []
         self._running = True
         self.server_socket = None # Para o shutdown
+
+        setup_file_logging(self.id)
 
         logger.success(f"Servidor {self.id} ({self.host}:{self.port}) inicializado.")
 
@@ -48,6 +59,7 @@ class Server(ConnectionHandlerMixin,
             self.host = self.config['server']['ip']
             self.port = self.config['server']['port']
             self.id_number = self.config['server']['id_number']
+            self.delay = self.config['timing']['heartbeat_retry_delay']
         except FileNotFoundError:
             logger.critical(f"Arquivo de configuração '{config_path}' não encontrado!")
             raise
@@ -64,9 +76,10 @@ class Server(ConnectionHandlerMixin,
         # Métodos _loop (ex: _listen_loop) vêm dos Mixins!
         thread_targets = {
             "Listener": self._listen_loop,
-            # "Heartbeat": self._heartbeat_loop,
+            "Heartbeat": self._heartbeat_loop,
             # "Monitor": self._monitor_loop,
-            "LoadBalancer": self._load_balancer_loop
+            "LoadBalancer": self._load_balancer_loop,
+            "InternalProducer": self._internal_producer_loop # <-- ADICIONADO
         }
 
         for name, target in thread_targets.items():

@@ -1,0 +1,29 @@
+{
+  "server": {
+    "ip": "127.0.0.1",
+    "port": 9001,
+    "id_number": "1"
+  },
+  "peers": [
+    {"ip": "127.0.0.1", "port": 9002, "id": "SERVER_2"}
+  ],
+  "timing": {
+    "heartbeat_interval": 15,
+    "heartbeat_timeout": 40,
+    "heartbeat_retries": 3,
+    "heartbeat_retry_delay": 5,
+    "load_balancer_interval": 20,
+    "heartbeat_backoff_factor": 2,      
+    "heartbeat_max_delay": 60,          
+    "heartbeat_jitter_frac": 0.15       
+  },
+  "load_balancing": {
+    "min_workers_before_sharing": 1,
+
+    "threshold_window": 30,
+    "threshold_min_tasks": 1,
+    
+    "min_queue_threshold": 5,
+    "max_queue_threshold": 15
+  }
+}

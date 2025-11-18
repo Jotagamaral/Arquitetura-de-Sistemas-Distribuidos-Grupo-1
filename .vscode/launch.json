@@ -1,0 +1,35 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // Configuração para DEPURAR O SERVIDOR
+      "name": "Debug: Py - Servidor",
+      "type": "debugpy",
+      "request": "launch",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      
+      // A MÁGICA ESTÁ AQUI:
+      // Isso é o equivalente a "python -m Server.run_server"
+      "module": "server.run_server",
+      
+      // Isso são os argumentos que seu script precisa
+      // (ajuste o caminho se necessário)
+      "args": [
+        "server/config_s1.json"
+      ]
+    },
+    {
+      // Configuração para DEPURAR O WORKER
+      "name": "Debug: Py - Worker",
+      "type": "debugpy",
+      "request": "launch",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      
+      // Isso é o equivalente a "python -m Worker.run_worker"
+      "module": "worker.run_worker",
+      "args": [] // O worker não precisa de argumentos (ele lê o worker_config.json)
+    }
+  ]
+}

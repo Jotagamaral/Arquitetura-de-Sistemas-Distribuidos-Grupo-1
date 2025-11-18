@@ -3,19 +3,24 @@ import socket
 import json
 import time
 from typing import Dict, List
+from random import uniform
 from logs.logger import logger
+from payload_models import server_heartbeat, server_request_worker, server_command_release, server_release_completed
 
 class ClientActionsMixin:
 
     def _send_heartbeat(self, peer: dict) -> bool:
-        """Tenta enviar um heartbeat para um peer (agora é um método)."""
+        """Tenta enviar um heartbeat para um peer usando backoff exponencial."""
         retries = self.config['timing']['heartbeat_retries']
-        delay = self.config['timing']['heartbeat_retry_delay']
-        
+        base_delay = self.config['timing'].get('heartbeat_retry_delay', 5)
+        backoff_factor = self.config['timing'].get('heartbeat_backoff_factor', 2)
+        max_delay = self.config['timing'].get('heartbeat_max_delay', 60)
+        jitter_frac = self.config['timing'].get('heartbeat_jitter_frac', 0.1)
+   
         for attempt in range(retries):
             try:
                 with socket.create_connection((peer['ip'], peer['port']), timeout=5) as client_socket:
-                    msg = {"SERVER_ID": self.id, "TASK": "HEARTBEAT"}
+                    msg = server_heartbeat(server_id=self.id)
                     client_socket.sendall((json.dumps(msg) + '\n').encode('utf-8')) # Adiciona \n
 
                     reader = client_socket.makefile('r', encoding='utf-8')
@@ -23,24 +28,31 @@ class ClientActionsMixin:
 
                     if not response_line:
                         logger.warning(f"[HB] Tentativa {attempt + 1}/{retries}: Sem resposta de {peer['id']}")
-                        time.sleep(delay)
-                        continue
+                        # irá dormir abaixo com backoff
+                        raise ConnectionError("Sem resposta")
 
                     data = json.loads(response_line)
                     if data.get("RESPONSE") == "ALIVE":
                         with self.lock:
                             self.peer_status[peer['id']] = {'last_alive': time.time()}
-                        logger.success(f"[HB] Sucesso com {peer['id']}.") # Log menos verboso
+                        logger.success(f"[HB] Sucesso com {peer['id']}.")
                         return True
                     else:
-                         logger.warning(f"[HB] Resposta inesperada de {peer['id']}: {data}")
+                        logger.warning(f"[HB] Resposta inesperada de {peer['id']}: {data}")
+                        # tratar como falha e tentar novamente
 
-            except (socket.timeout, ConnectionRefusedError) as e:
+            except (socket.timeout, ConnectionRefusedError, ConnectionError) as e:
                 logger.warning(f"[HB] Tentativa {attempt + 1}/{retries} para {peer['id']} falhou: {e}")
             except Exception as e:
                 logger.error(f"[HB] Erro inesperado na tentativa {attempt + 1} para {peer['id']}: {e}")
 
+            # calcula delay exponencial com cap e jitter antes da próxima tentativa
             if attempt < retries - 1:
+                raw_delay = base_delay * (backoff_factor ** attempt)
+                capped = min(raw_delay, max_delay)
+                jitter = uniform(-jitter_frac, jitter_frac)
+                delay = capped * (1 + jitter)
+                logger.info(f"[HB] Dormindo {delay:.2f}s antes da próxima tentativa ({attempt + 1}/{retries}).")
                 time.sleep(delay)
 
         logger.error(f"[HB] Todas as {retries} tentativas para {peer['id']} falharam.")
@@ -50,9 +62,12 @@ class ClientActionsMixin:
         """Envia solicitação de workers a um peer (agora é um método)."""
         try:
             with socket.create_connection((peer['ip'], peer['port']), timeout=5) as s:
+
                 requestor_info = {'ip': self.host, 'port': self.port}
-                msg = {"MASTER": self.id, "TASK": "WORKER_REQUEST", "REQUESTOR_INFO": requestor_info}
+                msg = server_request_worker(requestor_info=requestor_info)
+
                 logger.info(f"[LOAD] Solicitando workers a {peer['id']}")
+
                 s.sendall((json.dumps(msg) + '\n').encode('utf-8')) # Adiciona \n
 
                 reader = s.makefile('r', encoding='utf-8')
@@ -84,11 +99,7 @@ class ClientActionsMixin:
         """
         try:
             # Constrói o payload 5.1
-            msg = {
-                "MASTER": self.id,
-                "TASK": "COMMAND_RELEASE",
-                "WORKERS": worker_ids # Lista de IDs dos workers
-            }
+            msg = server_command_release(master_id=self.id, worker_ids=worker_ids)
             logger.info(f"[RELEASE] Notificando {peer['id']} sobre liberação de {len(worker_ids)} workers.")
 
             with socket.create_connection((peer['ip'], peer['port']), timeout=5) as s:
@@ -111,11 +122,28 @@ class ClientActionsMixin:
                 else:
                     logger.warning(f"[RELEASE] Resposta inesperada de {peer['id']}: {data}")
                     return False
-                
-
-           
-            
-                    
+         
         except Exception as e:
             logger.warning(f"[RELEASE] Falha ao enviar COMMAND_RELEASE para {peer['id']}: {e}")
             return False
+
+    def _send_release_completed(self, peer: dict, worker_ids: list):
+        """
+        Envia uma notificação "RELEASE_COMPLETED" para um peer (o que devolveu).
+        Esta é uma notificação "fire-and-forget".
+        """
+        try:
+            # Constrói o payload
+            msg = server_release_completed(server_id=self.id, worker_uuids=worker_ids)
+            
+            logger.info(f"[RELEASE] Enviando confirmação final (RELEASE_COMPLETED) para {peer['id']} sobre {worker_ids}")
+
+            # Conecta, envia e fecha.
+            with socket.create_connection((peer['ip'], peer['port']), timeout=5) as s:
+                s.sendall((json.dumps(msg) + '\n').encode('utf-8'))
+            
+            logger.success(f"[RELEASE] Confirmação final enviada para {peer['id']}.")
+
+        except Exception as e:
+            # Se falhar, apenas logamos. Não é uma falha crítica.
+            logger.warning(f"[RELEASE] Falha ao enviar RELEASE_COMPLETED para {peer['id']}: {e}")

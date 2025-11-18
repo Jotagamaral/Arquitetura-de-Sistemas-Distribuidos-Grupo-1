@@ -28,22 +28,25 @@ O ecossistema é composto por:
 
 
 3.  **Configure e Inicie os Servidores:**
-    * Para cada instância de servidor, duplique o arquivo `server_runner.py` (ex: `server_runner_8765.py`, `server_runner_8766.py`).
-    * Ajuste as configurações de IP, PORTA e peers em `server_lib/config.py` para cada instância.
-    * Em cada terminal, execute:
+    * Execute os servidores como módulos (importações relativas exigem execução com -m) a partir da raiz do repositório:
     ```bash
-    python server_runner.py
-    # ou para outra instância
-    python server_runner_8766.py
+    # Exemplo para iniciar o servidor 1
+    python -m server.run_server server/config_s1.json
+
+    # Em outro terminal, iniciar o servidor 2
+    python -m server.run_server server/config_s2.json
     ```
-    * Os logs são salvos em `log_server.txt` e exibidos no terminal, utilizando a biblioteca `loguru`.
+    * Rode os comandos a partir da pasta raiz do projeto (onde está o package `server`), para que as importações relativas funcionem corretamente.
+    * Os logs são gerenciados pelo pacote `logs` (veja `logs/logger.py`) e também exibidos no terminal com `loguru`.
 
 4.  **Inicie o Cliente de Teste (Worker):**
-    * Ajuste os parâmetros de teste em `client.py`.
-    * Em um novo terminal, execute:
+    * O worker carrega `worker/config.json` por padrão. Para executar o worker use:
     ```bash
-    python client.py
+    # Exemplo para iniciar o worker 1
+    python -m worker.run_worker
     ```
+    * Se preferir alterar o config do worker, edite `worker/config.json` antes de iniciar.
+
 
 ## 3. 🏛️ Arquitetura Visual
 
@@ -51,38 +54,48 @@ O diagrama a seguir ilustra o fluxo de comunicação e as interações entre os 
 
 ```mermaid
 graph TD
-    subgraph "Rede de Servidores (Peer-to-Peer)"
-        S1[Servidor A]
-        S2[Servidor B]
+    subgraph "Servidores"
+        S1[Servidor 1]
+        S2[Servidor 2]
     end
 
-    subgraph "Pool de Workers"
+    subgraph "Workers"
         W1[Worker 1]
         W2[Worker 2]
     end
     
-    DB[(Banco de Dados MySQL)]
+    DB[(Banco de Dados)]
 
-    %% Fluxo de Comunicação Principal
-    W1 -- "1. Conexão Inicial" --> S1
-    S1 -- "2. Envia Tarefa" --> W1
-    W1 -- "3. Executa Query/Update" --> DB
-    W1 -- "4. Devolve Resultado" --> S1
-    S1 -- "5. Envia Próxima Tarefa (Ciclo)" --> W1
-    
-    %% Comunicação entre Servidores
-    S1 <-.->|Heartbeat| S2
-
-    %% Fluxo de Balanceamento de Carga (Redirecionamento)
-    subgraph "Fluxo de Redirecionamento"
+    %% Conexões Iniciais e Ciclo de Tarefas
+    subgraph "Ciclo de Vida da Tarefa"
         direction LR
-        S1_load("S1 (Saturado)") -.->|A. Pede Workers| S2_load(S2)
-        S2_load -.->|B. Ordena Redirecionamento| W2_load(W2)
-        W2_load -->|C. Reconecta em S1| S1_load
+        W1 -- "get_task (ALIVE)" --> S1
+        S1 -- "new_task_payload (QUERY)" --> W1
+        W1 -- "Executa Operação" --> DB
+        W1 -- "task_status (OK/NOK)" --> S1
+        S1 -- "server_ack (ACK)" --> W1
     end
-    
-    %% Conexão inicial do Worker 2
-    W2 -- "Conectado a S2" --> S2
+
+    %% Comunicação Peer-to-Peer (Heartbeat)
+    S1 -- "server_heartbeat" --o S2
+    S2 -- "server_heartbeat_response (ALIVE)" --o S1
+
+    %% Fluxo de Empréstimo e Devolução de Workers
+    subgraph "Empréstimo e Devolução de Workers"
+        direction LR
+        S1 -- "server_request_worker" --> S2
+        S2 -- "server_response_available" --> S1
+        S2 -- "server_order_redirect" --> W2
+        W2 -- "get_task (ALIVE) + owner_id" --> S1
+        S1 -- "server_command_release" --> S2
+        S2 -- "server_release_ack" --> S1
+        S1 -- "server_order_return" --> W2
+        W2 -- "get_task (ALIVE) + owner_id" --> S2
+        S2 -- "server_release_completed" --> S1
+    end
+
+    %% Conexão inicial do Worker 2 (antes do empréstimo)
+    W2 -. "Conectado originalmente" .-> S2
 ```
 
 ### 📡 Tabela Resumo do Protocolo de Aplicação
@@ -98,23 +111,45 @@ Este snippet foca em detalhar as "regras do jogo" da comunicação entre os serv
 ```markdown
 ## 5. 📡 Protocolo de Aplicação
 
-A comunicação entre os componentes segue as regras customizadas abaixo, utilizando JSON sobre WebSocket/TCP.
+A comunicação entre os componentes segue as regras customizadas abaixo, utilizando JSON sobre WebSocket/TCP. Todos os payloads são gerados e validados pelo `payload_models.py`.
 
 ### Interação: Servidor ↔ Worker
-| Passo | Direção | Mensagem (Exemplo JSON) | Propósito |
-| 1 | Worker → Servidor | `{"WORKER": "ALIVE"}` | Apresentar-se e pedir tarefa. |
-| 2 | Servidor → Worker | `{"TASK": "QUERY", "USER": "..."}` | Enviar uma tarefa de consulta. |
-| 3 | Worker → Servidor | `{"STATUS": "OK", "SALDO": 99.99, ...}` | Devolver o resultado com sucesso. |
-| 4 | Worker → Servidor | `{"STATUS": "NOK", "TASK": "QUERY", "ERROR": "User not found"}` | Informar que a execução da tarefa falhou.|
-| 5 | Servidor → Worker | `{"TASK": "REDIRECT", "TARGET_MASTER": {"IP": "...", "PORT": ...}, "HOME_MASTER": {"IP": "...", "PORT": ...}, "FAILOVER_LIST": [...]}` | Comando de Empréstimo: O Servidor "Pai" ordena que o Worker se conecte a um TARGET_MASTER temporário.| 
 
-### Interação: Servidor ↔ Servidor (Peer)
-| Passo | Direção | Mensagem (Exemplo JSON) | Propósito |
-| 1 | Servidor A → Servidor B | `{"SERVER": "ALIVE", "TASK": "REQUEST"}` | Enviar um sinal de vida (heartbeat). |
-| 2 | Servidor B → Servidor A | `{"SERVER": "ALIVE" ,"TASK":"RECIEVE"}` | Recebe um sinal de vida (heartbeat). |
+Esta tabela descreve o fluxo básico de solicitação e execução de tarefas.
 
-| 3 | Servidor A → Servidor B | `{"TASK": "WORKER_REQUEST", "WORKERS_NEEDED": 5}` | Enviar um pedido de trabalhadores emprestado. |
-| 4.1 | Servidor B → Servidor A | `{"TASK": "WORKER_RESPONSE", "STATUS": "ACK", "MASTER":"UUID",  "WORKERS": ["WORKER_UUID": ...] }` | Enviar uma resposta positiva de pedido de trabalhadores emprestado. |
-| 4.2 | Servidor B → Servidor A | `{"TASK": "WORKER_RESPONSE", "STATUS": "NACK",  "WORKERS": [] }` | Enviar uma resposta negativa de pedido de trabalhadores emprestado. |
+| Passo | Direção | Mensagem (Exemplo JSON) | Propósito (Função) |
 
-| 4.3 | Worker (Emprestado) → Servidor A | `{"WORKER": "ALIVE", "WORKER_UUID":"..."}` | Worker emprestado envia uma conexão para o servidor saturado. |
+| 1   | Worker → Servidor | `{"WORKER": "ALIVE", "WORKER_UUID": "uuid-do-worker-123"}`                                         | Apresentar-se e pedir tarefa. (`get_task`)                                                 |
+| 1a  | Worker → Servidor | `{"WORKER": "ALIVE", "WORKER_UUID": "uuid-do-worker-456", "SERVER_UUID": "uuid-do-dono-original"}` | Worker "emprestado" se apresenta ao novo mestre, mas informa quem é seu dono. (`get_task`) |
+| 2.1 | Servidor → Worker | `{"TASK": "QUERY", "USER": "user_id"}`                                                             | Enviar uma tarefa. (`new_task_payload`)                                                    |
+| 2.2 | Servidor → Worker | `{"TASK": "NO_TASK"}`                                                                              | Informar que não há tarefas na fila. (`server_no_task`)                                    |
+| 3   | Worker → Servidor | `{"STATUS": "OK", "TASK": "QUERY", "WORKER_UUID": "uuid-do-worker-123"}`                           | Reportar sucesso na execução da tarefa. (`task_status`)                                    |
+| 4   | Worker → Servidor | `{"STATUS": "NOK", "TASK": "QUERY", "WORKER_UUID": "uuid-do-worker-123"}`                          | Reportar falha na execução da tarefa. (`task_status`)                                      |
+| 5   | Servidor → Worker | `{"STATUS": "ACK"}`                                                                                | Servidor confirma o recebimento do status (Passos 3 ou 4). (`server_ack`)                  |
+
+### Interação: Servidor ↔ Servidor (Comunicação Peer-to-Peer)
+
+Esta comunicação é dividida em dois fluxos principais: **Heartbeat** (para checagem de
+saúde) e **Gerenciamento de Workers** (para empréstimo e devolução).
+
+#### Fluxo 1: Heartbeat
+
+| Passo | Direção | Mensagem (Exemplo JSON) | Propósito (Função) |
+
+| 1 | Servidor A → Servidor B | `{"SERVER_UUID": "uuid-servidor-A", "TASK": "HEARTBEAT"}`                      | Checar se o Servidor B está ativo. (`server_heartbeat`)                        |
+| 2 | Servidor B → Servidor A | `{"SERVER_UUID": "uuid-servidor-B", "TASK": "HEARTBEAT", "RESPONSE": "ALIVE"}` | Responder ao heartbeat, confirmando estar ativo. (`server_heartbeat_response`) |
+
+#### Fluxo 2: Empréstimo e Devolução de Workers
+
+Este é o fluxo completo para um Servidor (S1) pedir, receber, usar e devolver workers de outro Servidor (S2).
+
+| Passo | Fluxo | Direção | Mensagem (Exemplo JSON) | Propósito (Função) |
+
+| 1  | Pedido                   | S1 (Requisitante) → S2 (Dono) | `{"TASK": "WORKER_REQUEST", "REQUESTOR_INFO": {"ip": "1.2.3.4", "port": 8000}}`                          | S1 solicita workers. (`server_request_worker`)                                            |
+| 2a | Resposta (Positiva)      | S2 (Dono) → S1 (Requisitante) | `{"SERVER_UUID": "uuid-servidor-S2", "RESPONSE": "AVAILABLE", "WORKERS_UUID": ["uuid-w1", "uuid-w2"]}`   | S2 informa que tem workers e irá enviá-los. (`server_response_available`)                 |
+| 2b | Resposta (Negativa)      | S2 (Dono) → S1 (Requisitante) | `{"SERVER_UUID": "uuid-servidor-S2", "RESPONSE": "UNAVAILABLE"}`                                         | S2 informa que não tem workers para emprestar. (`server_response_unavailable`)            |
+| 3  | Ordem de Empréstimo      | S2 (Dono) → Worker            | `{"TASK": "REDIRECT", "SERVER_REDIRECT": {"ip": "1.2.3.4", "port": 8000}}`                               | S2 ordena seu Worker a se conectar em S1. (`server_order_redirect`)                       |
+| 4  | Notificação de Devolução | S1 (Requisitante) → S2 (Dono) | `{"SERVER_UUID": "uuid-servidor-S1", "TASK": "COMMAND_RELEASE", "WORKERS_UUID": ["uuid-w1", "uuid-w2"]}` | S1 avisa que não precisa mais dos workers e está os liberando. (`server_command_release`) |
+| 5  | Confirmação da Devolução | S2 (Dono) → S1 (Requisitante) | `{"SERVER_UUID": "uuid-servidor-S2", "RESPONSE": "RELEASE_ACK", "WORKERS_UUID": ["uuid-w1", "uuid-w2"]}` | S2 confirma o recebimento da notificação de liberação. (`server_release_ack`)             |
+| 6  | Ordem de Retorno         | S1 (Requisitante) → Worker    | `{"TASK": "RETURN", "SERVER_RETURN": {"ip": "5.6.7.8", "port": 9000}}`                                   | S1 ordena ao Worker emprestado que volte para S2 (seu dono). (`server_order_return`)      |
+| 7  | Confirmação de Chegada   | S2 (Dono) → S1 (Requisitante) | `{"SERVER_UUID": "uuid-servidor-S2", "RESPONSE": "RELEASE_COMPLETED", "WORKERS_UUID": ["uuid-w1"]}`      | S2 informa a S1 que os workers retornaram. (`server_release_completed`)                   |

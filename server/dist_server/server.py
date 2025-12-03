@@ -26,6 +26,7 @@ class Server(ConnectionHandlerMixin,
 
         # Estado do Servidor
         self.id = f'SERVER_{self.id_number}'
+        self.start_time = time.time()
         self.peer_status: Dict[str, Dict] = {}
         self.worker_status: Dict[str, Dict] = {}
         self.active_peers: List[Dict] = list(self.config['peers'])
@@ -73,18 +74,18 @@ class Server(ConnectionHandlerMixin,
         logger.info("Iniciando threads do servidor...")
         self._running = True
 
-        # Métodos _loop (ex: _listen_loop) vêm dos Mixins!
+        # Métodos _loop
         thread_targets = {
             "Listener": self._listen_loop,
             "Heartbeat": self._heartbeat_loop,
             # "Monitor": self._monitor_loop,
             "LoadBalancer": self._load_balancer_loop,
-            "InternalProducer": self._internal_producer_loop # <-- ADICIONADO
+            "InternalProducer": self._internal_producer_loop,
+            "PerformanceReporter": self._performance_reporter_loop
         }
 
         for name, target in thread_targets.items():
-            # Usar daemon=False se você quiser que o .join() no stop() 
-            # funcione de forma mais confiável.
+
             thread = threading.Thread(target=target, name=name, daemon=True)
             thread.start()
             self._threads.append(thread)
@@ -104,7 +105,7 @@ class Server(ConnectionHandlerMixin,
     def stop(self):
         """Sinaliza para as threads pararem (implementação melhorada)."""
         if not self._running:
-            return # Já está parando
+            return 
             
         logger.warning("Recebido sinal de encerramento...")
         self._running = False
@@ -116,12 +117,5 @@ class Server(ConnectionHandlerMixin,
                 logger.info("Socket do listener fechado.")
         except Exception as e:
             logger.error(f"Erro ao fechar socket do listener: {e}")
-
-        # 2. (Opcional, mas recomendado) Espera as threads terminarem
-        # logger.info("Aguardando threads finalizarem...")
-        # for thread in self._threads:
-        #    thread.join(timeout=2.0) # Espera com timeout
-        #    if thread.is_alive():
-        #        logger.warning(f"Thread '{thread.name}' não finalizou a tempo.")
         
         logger.info("Servidor encerrado.")

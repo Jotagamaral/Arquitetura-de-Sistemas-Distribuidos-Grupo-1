@@ -4,6 +4,7 @@ Centraliza a criação de todos os payloads (contratos)
 usados na comunicação entre Servidor e Worker.
 """
 import uuid
+from datetime import datetime, UTC
 
 # --- Payloads enviados pelo WORKER ---
 
@@ -33,7 +34,7 @@ def task_status(worker_id: str, status: str, task: str) -> dict:
     print(payload)
     return payload
 
-# --- Payloads criados pelo PRODUTOR (interno do Servidor) ---
+# --- Payloads criados pelo PRODUTOR ---
 
 # PADRÃO PAYLOAD OK
 def new_task_payload(user: str, task_type: str = "QUERY") -> dict:
@@ -49,7 +50,7 @@ def new_task_payload(user: str, task_type: str = "QUERY") -> dict:
     print(payload)
     return payload
 
-# --- Payloads enviados pelo SERVIDOR (Apenas como referência) ---
+# --- Payloads enviados pelo SERVIDOR ---
 
 def server_no_task() -> dict:
     """Payload que o Servidor envia quando a fila está vazia."""
@@ -201,6 +202,35 @@ def server_release_completed(server_id: str, worker_uuids: list) -> dict:
         "SERVER_UUID": server_id,
         "RESPONSE": "RELEASE_COMPLETED", # É uma resposta, não uma TASK
         "WORKERS_UUID": worker_uuids
+    }
+
+    print(payload)
+    return payload
+
+# --- Payload enviado pelo SERVIDOR para SUPERVISOR ---
+
+def server_performance_report(
+        server_uuid: str,
+        system_data: dict,
+        farm_data: dict,
+        config_thresholds: dict,
+        neighbors_data: list
+    ) -> dict:
+    """
+    Gera o payload de relatório de performance para o supervisor.
+    """
+    payload = {
+        "server_uuid": server_uuid,
+        "task": "performance_report",
+        "timestamp": datetime.now(UTC).isoformat(), # ISO-8601
+        #"timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z")
+        "mensage_id": str(uuid.uuid4()),
+        "performance": {
+            "system": system_data,
+            "farm_state": farm_data, 
+        },
+        "config_thresholds": config_thresholds,
+        "neighbors": neighbors_data
     }
 
     print(payload)

@@ -1,9 +1,12 @@
 # dist_server/background_tasks.py
 import time
+import psutil
+import os
+from datetime import datetime, timezone
 import threading
 from random import choice
 from logs.logger import logger
-from payload_models import new_task_payload
+from payload_models import new_task_payload, server_performance_report
 
 class BackgroundTasksMixin:
 
@@ -263,3 +266,161 @@ class BackgroundTasksMixin:
         # Limpa o estado para que o _load_balancer_loop possa tentar de novo no futuro
         with self.lock:
             self.pending_release_attempts.pop(owner_id, None)
+
+
+    def _performance_reporter_loop(self):
+        """
+        Thread dedicada a coletar métricas e enviar para o Supervisor.
+        """
+        # Carrega configs do JSON
+        config_sup = self.config.get('supervisor', {})
+        report_interval = config_sup.get('supervisor_interval', 10)
+        supervisor_info = config_sup.get('supervisor_info')
+
+        while self._running:
+            # Dorme primeiro
+            for _ in range(report_interval):
+                if not self._running: return
+                time.sleep(1)
+
+            try:
+                # 1. COLETAR DADOS DO SISTEMA
+                try:
+                    load_avg = psutil.getloadavg() # Retorna tupla (1m, 5m, 15m)
+                except AttributeError:
+                    load_avg = (0.0, 0.0, 0.0) # Fallback para Windows antigo
+
+                mem = psutil.virtual_memory()
+                disk = psutil.disk_usage('/')
+                cpu_percent = psutil.cpu_percent(interval=0.1)
+                
+                uptime = time.time() - self.start_time
+
+                system_data = {
+                    "uptime_seconds": int(uptime),
+                    "load_average_1m": load_avg[0],
+                    "load_average_5m": load_avg[1],
+                    "cpu": {
+                        "usage_percent": cpu_percent,
+                        "count_logical": psutil.cpu_count(logical=True),
+                        "count_physical": psutil.cpu_count(logical=False)
+                    },
+                    "memory": {
+                        "total_mb": int(mem.total / (1024 * 1024)),
+                        "available_mb": int(mem.available / (1024 * 1024)),
+                        "percent_used": mem.percent,
+                        "memory_used": int(mem.used / (1024 * 1024))
+                    },
+                    "disk": {
+                        "total_gb": round(disk.total / (1024**3), 2),
+                        "free_gb": round(disk.free / (1024**3), 2),
+                        "percent_used": disk.percent
+                    }
+                }
+
+                # 2. COLETAR DADOS DA "FAZENDA" (Workers/Tasks)
+                farm_data = self._collect_farm_state()
+
+                # 3. DADOS DE CONFIGURAÇÃO
+                config_data = {
+                     "max_queue": self.config['load_balancing'].get('max_queue_threshold', 0)
+                }
+
+                # 4. DADOS DOS VIZINHOS
+                neighbors_data = self._collect_neighbors_state()
+
+                # 5. GERAR PAYLOAD
+                payload = server_performance_report(
+                    server_uuid=self.id,
+                    system_data=system_data,
+                    farm_data=farm_data,
+                    config_thresholds=config_data,
+                    neighbors_data=neighbors_data
+                )
+
+                # 6. ENVIAR
+                if supervisor_info:
+                    self._send_to_supervisor(supervisor_info, payload)
+                else:
+                    logger.warning("[REPORT] Supervisor não configurado no JSON.")
+                
+                # Log local para debug visual
+                logger.info(f"[REPORT] Métricas coletadas. CPU: {system_data['cpu']['usage_percent']}% | Fila: {farm_data['tasks']['tasks_pending']}")
+
+            except Exception as e:
+                logger.error(f"[REPORT] Erro ao gerar relatório de performance: {e}")
+
+
+    def _collect_farm_state(self) -> dict:
+        """Helper para calcular o estado dos workers e tarefas."""
+        now = time.time()
+        timeout = self.config['timing']['heartbeat_timeout']
+        
+        workers_total = 0
+        workers_alive = 0
+        workers_idle = 0
+        workers_borrowed = 0 
+
+        workers_received = 0
+        workers_failed = 0
+        
+        with self.lock:
+            queue_size = len(self.task_queue)
+            # running seria tasks que saíram da fila mas não voltaram. 
+            # Se não rastreamos isso, assumimos 0 ou implementamos depois.
+            tasks_running = 0 
+            
+            workers_total = len(self.worker_status)
+            
+            for w_id, w_info in self.worker_status.items():
+                print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+                print(w_info)
+                is_alive = (now - w_info['last_seen']) < timeout
+                
+                if is_alive:
+                    workers_alive += 1
+                    workers_idle += 0
+                    
+                    # Verifica se é worker recebido
+                    if w_info.get('SERVER_UUID'): 
+                         workers_received += 1
+                else:
+                    if w_info.get("BORROWED") == True:
+                        workers_borrowed += 1
+                    else:
+                        workers_failed += 1
+
+
+        return {
+            "workers": {
+                "total_registered": workers_total,
+                "workers_utilization": 0, # Placeholder
+                "workers_alive": workers_alive,
+                "workers_idle": workers_idle,
+                "workers_borrowed": workers_borrowed,
+                "workers_recieved": workers_received,
+                "workers_failed": workers_failed
+            },
+            "tasks": {
+                "tasks_pending": queue_size,
+                "tasks_running": tasks_running
+            }
+        }
+
+
+    def _collect_neighbors_state(self) -> list:
+        """Helper para formatar status dos vizinhos."""
+        neighbors = []
+        with self.lock:
+            for peer_id, status in self.peer_status.items():
+                # Converte timestamp para ISO
+                last_seen_ts = status.get('last_alive', 0)
+                last_seen_iso = datetime.fromtimestamp(last_seen_ts, tz=timezone.utc).isoformat()
+                
+                neighbors.append({
+                    "server_uuid": peer_id,
+                    "status": "available", # Se está no peer_status, assumimos available
+                    "last_heartbeat": last_seen_iso
+                })
+        return neighbors
+

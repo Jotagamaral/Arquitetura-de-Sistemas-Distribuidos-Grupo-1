@@ -13,7 +13,7 @@ O ecossistema é composto por:
 * **Servidores (`server_runner.py` + `server_lib/`)**: Orquestradores que gerenciam workers, distribuem tarefas e comunicam-se entre si para monitoramento de carga e status (heartbeat). Toda a lógica do servidor está modularizada na pasta `server_lib/`.
 * **Workers (`client.py`)**: Executores de tarefas que se conectam aos servidores e retornam resultados (fictícios).
 
-## 2. 🚀 Guia de Execução Rápida (Quick Start)
+## 2. Guia de Execução Rápida (Quick Start)
 
 1.  **Clone o repositório:**
     ```bash
@@ -48,7 +48,7 @@ O ecossistema é composto por:
     * Se preferir alterar o config do worker, edite `worker/config.json` antes de iniciar.
 
 
-## 3. 🏛️ Arquitetura Visual
+## 3. Arquitetura Visual
 
 O diagrama a seguir ilustra o fluxo de comunicação e as interações entre os componentes do sistema.
 
@@ -98,7 +98,7 @@ graph TD
     W2 -. "Conectado originalmente" .-> S2
 ```
 
-### 📡 Tabela Resumo do Protocolo de Aplicação
+### Tabela Resumo do Protocolo de Aplicação
 
 
 > **Nota:**
@@ -109,7 +109,7 @@ graph TD
 Este snippet foca em detalhar as "regras do jogo" da comunicação entre os serviços, um dos pontos-chave do seu projeto.
 
 ```markdown
-## 5. 📡 Protocolo de Aplicação
+## 5. Protocolo de Aplicação
 
 A comunicação entre os componentes segue as regras customizadas abaixo, utilizando JSON sobre WebSocket/TCP. Todos os payloads são gerados e validados pelo `payload_models.py`.
 

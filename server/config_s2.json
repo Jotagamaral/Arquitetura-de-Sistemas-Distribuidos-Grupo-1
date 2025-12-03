@@ -2,11 +2,18 @@
   "server": {
     "ip": "127.0.0.1",
     "port": 9002,
-    "id_number": "2"
+    "id_number": "1.test"
   },
+  
   "peers": [
     {"ip": "127.0.0.1", "port": 9001, "id": "SERVER_1"}
   ],
+
+  "supervisor":{
+    "supervisor_info": {"ip": "srv.webrelay.dev", "port": 34121},
+    "supervisor_interval": 10
+  },
+
   "timing": {
     "heartbeat_interval": 15,
     "heartbeat_timeout": 40,
@@ -17,6 +24,7 @@
     "heartbeat_max_delay": 60,          
     "heartbeat_jitter_frac": 0.15       
   },
+
   "load_balancing": {
     "min_workers_before_sharing": 1,
 

@@ -147,3 +147,33 @@ class ClientActionsMixin:
         except Exception as e:
             # Se falhar, apenas logamos. Não é uma falha crítica.
             logger.warning(f"[RELEASE] Falha ao enviar RELEASE_COMPLETED para {peer['id']}: {e}")
+
+    def _send_to_supervisor(self, supervisor_info: dict, payload: dict) -> bool:
+        """
+        Envia o payload de performance para o Supervisor.
+        """
+        try:
+            ip = supervisor_info.get('ip')
+            port = supervisor_info.get('port')
+
+            if not ip or not port:
+                logger.error("[REPORT] Configuração do Supervisor inválida (IP ou Porta ausente).")
+                return False
+
+            with socket.create_connection((ip, port), timeout=2) as s:
+                msg = json.dumps(payload) + '\n'
+                s.sendall(msg.encode('utf-8'))
+            
+            logger.success(f"[REPORT] Relatório enviado para {ip}:{port}") 
+
+            return True
+
+        except socket.timeout:
+            logger.warning(f"[REPORT] Timeout ao tentar conectar ao Supervisor em {ip}:{port}")
+            return False
+        except ConnectionRefusedError:
+            logger.warning(f"[REPORT] Conexão recusada pelo Supervisor em {ip}:{port}. Ele está online?")
+            return False
+        except Exception as e:
+            logger.error(f"[REPORT] Erro ao enviar para supervisor: {e}")
+            return False

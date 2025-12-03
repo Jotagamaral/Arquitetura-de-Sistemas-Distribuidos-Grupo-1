@@ -201,8 +201,11 @@ class ConnectionHandlerMixin:
                                     # Procura em qual lote pendente este worker está
                                     for server_id, return_info in self.pending_returns.items():
                                         if entity_id in return_info['workers_pending']:
-                                            # Encontramos! O worker 'w1' pertence ao lote de 'SERVER_1'
+
                                             logger.success(f"[RETURN] Worker {entity_id} retornou com sucesso de {server_id}.")
+
+                                            if entity_id in self.worker_status:
+                                                self.worker_status[entity_id]["BORROWED"] = False
                                             
                                             # Remove o worker da lista de pendentes
                                             return_info['workers_pending'].remove(entity_id)
@@ -249,6 +252,7 @@ class ConnectionHandlerMixin:
                                             if task_type == 'RETURN':
                                                 redirect_msg = server_order_return(return_target_server=target_server)
                                                 logger.warning(f"Ordenando RETORNO para {entity_id} -> {target_server}")
+
                                             else: # REDIRECT normal
                                                 redirect_msg = server_order_redirect(redirect_target_server=target_server)
                                                 logger.warning(f"Ordenando REDIRECT (via GET_TASK) para {entity_id} -> {target_server['ip']}")
@@ -386,5 +390,5 @@ class ConnectionHandlerMixin:
                  if connection_type == "WORKER" and order_to_remove and entity_id:
                      with self.lock:
                          if entity_id in self.worker_status:
-                             del self.worker_status[entity_id]
-                             logger.info(f"Worker {entity_id} removido do status.")
+                             self.worker_status[entity_id]["BORROWED"] = True
+                             logger.info(f"Worker {entity_id} alocado como emprestado.")

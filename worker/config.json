@@ -2,6 +2,6 @@
   "home_server": {
     "host": "127.0.0.1",
     "port": 9002,
-    "uuid": "SERVER_2"
+    "uuid": "SERVER_1.test"
   }
 }

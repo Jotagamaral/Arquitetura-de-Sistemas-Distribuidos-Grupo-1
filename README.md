@@ -1,4 +1,4 @@
-# Sistema Distribuído de Servidor e Worker
+# Arquitetura de Sistema Distribuído baseado em Mensageria
 
 **Integrantes**: João Gabriel, Carlos Eduardo e Arthur Gomes.
 
